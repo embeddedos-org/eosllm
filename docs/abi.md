@@ -72,6 +72,30 @@ const char *eos_status_str(eos_status_t s);
 New error codes are appended at the end. Hosts must treat unknown codes as
 `EOS_E_INTERNAL`.
 
+- **Compile-time vs runtime backend availability**
+
+  ```c
+  int eos_backend_available(const char *name);  /* per-backend probe */
+  ```
+
+  And via `eos_caps()`:
+
+  ```c
+  eos_caps_t c;
+  eos_caps(&c);
+  if (c.have_k_avx2 && (c.runtime_bits & EOS_CAPS_RT_AVX2)) {
+      /* AVX2 was compiled in AND the host CPU's probe accepted it. */
+  }
+  ```
+
+  `runtime_bits` carries one bit per backend whose runtime probe
+  passed at the time of the `eos_caps()` call. Masks: `EOS_CAPS_RT_AVX2`,
+  `EOS_CAPS_RT_AVX512`, `EOS_CAPS_RT_NEON`, `EOS_CAPS_RT_SVE`,
+  `EOS_CAPS_RT_RVV`, `EOS_CAPS_RT_HVX`, `EOS_CAPS_RT_NPU`. A bit
+  set in `runtime_bits` always implies the matching `have_k_*`
+  compile-time bit is also set; the converse isn't guaranteed (the
+  CPU may lack a feature the binary supports).
+
 ### Last-error string
 
 For human-readable context beyond the enum, call `eos_last_error()`:

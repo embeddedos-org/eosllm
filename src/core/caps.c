@@ -54,5 +54,19 @@ eos_status_t eos_caps(eos_caps_t *out) {
     /* No on-disk format implementation exists in Phase 0. */
     out->eosm_max_version = 0;
 
+    /*
+     * Populate runtime-detected bits via eos_backend_available, which
+     * runs each backend's probe(). A bit set here means BOTH compiled
+     * in AND the CPU's runtime check passes.
+     */
+    out->runtime_bits = 0;
+    if (eos_backend_available("x86_avx2"))   out->runtime_bits |= EOS_CAPS_RT_AVX2;
+    if (eos_backend_available("x86_avx512")) out->runtime_bits |= EOS_CAPS_RT_AVX512;
+    if (eos_backend_available("arm_neon"))   out->runtime_bits |= EOS_CAPS_RT_NEON;
+    if (eos_backend_available("arm_sve"))    out->runtime_bits |= EOS_CAPS_RT_SVE;
+    if (eos_backend_available("rvv"))        out->runtime_bits |= EOS_CAPS_RT_RVV;
+    if (eos_backend_available("hvx"))        out->runtime_bits |= EOS_CAPS_RT_HVX;
+    if (eos_backend_available("npu"))        out->runtime_bits |= EOS_CAPS_RT_NPU;
+
     return EOS_OK;
 }

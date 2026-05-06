@@ -136,9 +136,28 @@ typedef struct eos_caps {
     /* On-disk format max version supported. 0 if no format compiled in. */
     uint16_t eosm_max_version;
 
+    /*
+     * Runtime-detected backend availability bits. The corresponding
+     * EOSLLM_HAVE_KERNEL_* macro tells you what was COMPILED IN; this
+     * byte tells you what the host CPU's runtime probe ALSO accepts
+     * (e.g. AVX2 was compiled in but the actual silicon doesn't have
+     * it). Populated by eos_caps() via eos_backend_available(). Use
+     * the EOS_CAPS_RT_* masks below to test individual bits.
+     */
+    uint8_t  runtime_bits;
+
     /* Reserved for future capabilities; always zero today. */
-    uint8_t  _reserved[6];
+    uint8_t  _reserved[5];
 } eos_caps_t;
+
+/* Bit masks for eos_caps_t::runtime_bits. */
+#define EOS_CAPS_RT_AVX2    (1u << 0)
+#define EOS_CAPS_RT_AVX512  (1u << 1)
+#define EOS_CAPS_RT_NEON    (1u << 2)
+#define EOS_CAPS_RT_SVE     (1u << 3)
+#define EOS_CAPS_RT_RVV     (1u << 4)
+#define EOS_CAPS_RT_HVX     (1u << 5)
+#define EOS_CAPS_RT_NPU     (1u << 6)
 
 /* Fills *out with capability bits for the linked library build. */
 eos_status_t eos_caps(eos_caps_t *out);

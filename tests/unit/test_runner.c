@@ -77,6 +77,25 @@ static void test_version_and_caps(void) {
     CHECK(caps.have_t_bpe    == 1,           "bpe tokenizer compiled in");
     CHECK(caps.have_m_text   == 1,           "text modality compiled in");
     CHECK(caps.have_s_greedy == 1,           "greedy scheduler compiled in");
+
+    /* AR contract: runtime_bits must agree with eos_backend_available
+     * for every covered backend. The compile-time bit is necessary
+     * (can't be runtime-on if it's not compiled), and runtime-on
+     * implies compile-time-on. */
+    {
+        int rt_avx2   = (caps.runtime_bits & EOS_CAPS_RT_AVX2)   != 0;
+        int rt_avx512 = (caps.runtime_bits & EOS_CAPS_RT_AVX512) != 0;
+        int rt_neon   = (caps.runtime_bits & EOS_CAPS_RT_NEON)   != 0;
+        CHECK(rt_avx2   == eos_backend_available("x86_avx2"),
+              "runtime_bits.AVX2 matches eos_backend_available");
+        CHECK(rt_avx512 == eos_backend_available("x86_avx512"),
+              "runtime_bits.AVX512 matches eos_backend_available");
+        CHECK(rt_neon   == eos_backend_available("arm_neon"),
+              "runtime_bits.NEON matches eos_backend_available");
+        if (rt_avx2)   CHECK(caps.have_k_avx2   == 1, "rt_avx2   implies have_k_avx2");
+        if (rt_avx512) CHECK(caps.have_k_avx512 == 1, "rt_avx512 implies have_k_avx512");
+        if (rt_neon)   CHECK(caps.have_k_neon   == 1, "rt_neon   implies have_k_neon");
+    }
 }
 
 static void test_init_defaults(void) {
