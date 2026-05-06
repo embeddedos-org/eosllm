@@ -189,7 +189,7 @@ LIB := libeosllm.a
 # ---------------------------------------------------------------------
 # Top-level targets
 # ---------------------------------------------------------------------
-.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help
+.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors
 
 all: lib
 
@@ -406,6 +406,7 @@ all-checks:
 	echo "==== make test ===="            ; $(MAKE) clean > /dev/null && $(MAKE) test; \
 	echo "==== make smoke-all ===="       ; $(MAKE) smoke-all; \
 	echo "==== make determinism ===="     ; $(MAKE) determinism; \
+	echo "==== make check-errors ===="    ; $(MAKE) check-errors; \
 	echo "==== make sanitize ===="        ; $(MAKE) sanitize; \
 	echo "==== make sanitize-cli ===="    ; $(MAKE) sanitize-cli; \
 	echo "==== make sanitize-bench ===="  ; $(MAKE) sanitize-bench; \
@@ -416,6 +417,12 @@ all-checks:
 	fi; \
 	echo ""; \
 	echo "all-checks: OK"
+
+# Verifies every EOSI_LOG_ERROR("...") string in src/ is unique so
+# eos_last_error() pinpoints the failing site. Wraps
+# tools/check_error_strings.sh for `make check-errors` ergonomics.
+check-errors:
+	@bash tools/check_error_strings.sh
 
 # Self-documenting target reference. Mirror of the table in
 # docs/architecture.md; keep them in sync when adding new targets.

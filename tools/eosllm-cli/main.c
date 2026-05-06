@@ -32,6 +32,7 @@ static void usage(void) {
         "       eosllm-cli --last-error\n"
         "       eosllm-cli --caps\n"
         "       eosllm-cli --metadata <path.gguf>\n"
+        "       eosllm-cli --version\n"
         "\n"
         "Phase 1 generates greedy text from a Llama-class GGUF.\n"
         "--smoke runs the full session lifecycle against an in-memory\n"
@@ -240,6 +241,7 @@ int main(int argc, char **argv) {
     int         smoke_bad_magic = 0;
     int         show_last_error = 0;
     int         show_caps   = 0;
+    int         show_version = 0;
     const char *meta_path   = NULL;
     int         i;
     eos_status_t s;
@@ -257,6 +259,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--smoke-bad-magic"))           smoke_bad_magic = 1;
         else if (!strcmp(argv[i], "--last-error"))                 show_last_error = 1;
         else if (!strcmp(argv[i], "--caps"))                       show_caps  = 1;
+        else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-V"))
+            show_version = 1;
         else if (!strcmp(argv[i], "--metadata") && i + 1 < argc)  meta_path  = argv[++i];
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h"))
             { usage(); return 0; }
@@ -264,6 +268,13 @@ int main(int argc, char **argv) {
     }
 
     if (smoke) return run_smoke();
+
+    if (show_version) {
+        /* Single line, machine-parseable. Common packager request. */
+        fprintf(stdout, "eosllm %s abi=%d\n",
+                eos_version_string(), eos_abi_version());
+        return 0;
+    }
 
     if (show_caps) {
         eos_caps_t c;
