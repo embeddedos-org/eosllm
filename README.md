@@ -1,5 +1,11 @@
 # eosllm
 
+[![ci](https://github.com/embeddedos-org/eosllm/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/embeddedos-org/eosllm/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
+[![security](https://img.shields.io/badge/security-policy-orange.svg)](SECURITY.md)
+[![C99](https://img.shields.io/badge/C-99-informational.svg)](include/eosllm/eosllm.h)
+
 **Edge-first multi-modal inference engine in pure C99.**
 
 eosllm is an inference runtime designed to run vision, audio, and text models on
