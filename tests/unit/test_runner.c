@@ -1037,6 +1037,90 @@ static void test_avx2_q4_k_parity(void) {
               "avx2 matmul_q4_k matches scalar within 1e-4 (random input)");
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* AVX2 matmul_q4_k_int8 vs scalar parity (5e-3 relative tolerance —   */
+/* activation block-quantization adds ~1 i8 ULP / 127 ≈ 0.4% per       */
+/* sub-block; the bound is documented in docs/quant_schemes.md). Same  */
+/* fixture as the f32-dequant parity test above but with N=4 so the    */
+/* call exercises the cached-activation hot path (the int8 kernel      */
+/* delegates to the f32-dequant path for N<4).                         */
+/* ------------------------------------------------------------------ */
+static void test_avx2_q4_k_int8_parity(void) {
+    enum { K = 256, N = 4 };
+    /* Same single super-block for every output column — n=4 columns
+     * just stack copies of the same 144-byte super-block into the
+     * weight matrix so we can verify all 4 outputs equal the scalar
+     * reference within tolerance. */
+    uint8_t  block[144];
+    uint8_t  weights[N * 144];
+    uint8_t  sc[8] = {  3, 12,  7, 21, 15,  9, 30,  4 };
+    uint8_t  m_arr [8] = {  1,  2,  3,  4,  5,  6,  7,  8 };
+    float    a[K], cs[N], cv[N];
+    int      i;
+    eosi_f16_t d_h    = eosi_f32_to_f16(0.25f);
+    eosi_f16_t dmin_h = eosi_f32_to_f16(0.0625f);
+
+    memset(block, 0, sizeof(block));
+    memcpy(block,     &d_h,    2);
+    memcpy(block + 2, &dmin_h, 2);
+    {
+        uint8_t scales12[12];
+        int j;
+        for (j = 0; j < 4; ++j) {
+            scales12[j]     = (uint8_t)((sc[j] & 0x3Fu)
+                              | (((sc[j + 4] >> 4) & 0x3u) << 6));
+            scales12[j + 4] = (uint8_t)((m_arr[j] & 0x3Fu)
+                              | (((m_arr[j + 4] >> 4) & 0x3u) << 6));
+            scales12[j + 8] = (uint8_t)((sc[j + 4] & 0x0Fu)
+                              | ((m_arr[j + 4] & 0x0Fu) << 4));
+        }
+        memcpy(block + 4, scales12, 12);
+    }
+    for (i = 0; i < 128; ++i) {
+        uint8_t lo = (uint8_t)(i & 0x0Fu);
+        uint8_t hi = (uint8_t)(15u - (i & 0x0Fu));
+        block[16 + i] = (uint8_t)(lo | (hi << 4));
+    }
+    for (i = 0; i < N; ++i) memcpy(weights + i * 144, block, 144);
+
+    g_xs_state = 0x42424242u;     /* same seed as the f32-dequant test */
+    for (i = 0; i < K; ++i) a[i] = xs_rand_unit();
+
+    {
+        eos_status_t s1 = eosi_scalar_matmul_q4_k    (a, weights, cs, 1, N, K);
+        eos_status_t s2 = eosi_avx2_matmul_q4_k_int8 (a, weights, cv, 1, N, K);
+        /* Activation block-quantization gives roughly 1 i8 ULP / 127 of
+         * relative noise per sub-block; an absolute tolerance doesn't
+         * compose because the result magnitude depends on the weight
+         * scale × K. Use a relative bound with a small absolute floor
+         * for catastrophic-cancellation protection. */
+        float ref = cs[0] < 0 ? -cs[0] : cs[0];
+        float tol = 5e-3f * ref;
+        if (tol < 1e-3f) tol = 1e-3f;
+        CHECK(s1 == EOS_OK && s2 == EOS_OK,
+              "avx2/scalar matmul_q4_k_int8 both return OK");
+        CHECK(approx_eq(cv[0], cs[0], tol),
+              "avx2 matmul_q4_k_int8 col 0 matches scalar within 5e-3 relative");
+        CHECK(approx_eq(cv[1], cs[1], tol),
+              "avx2 matmul_q4_k_int8 col 1 matches scalar within 5e-3 relative");
+        CHECK(approx_eq(cv[2], cs[2], tol),
+              "avx2 matmul_q4_k_int8 col 2 matches scalar within 5e-3 relative");
+        CHECK(approx_eq(cv[3], cs[3], tol),
+              "avx2 matmul_q4_k_int8 col 3 matches scalar within 5e-3 relative");
+    }
+
+    /* All-zero activation: must produce exactly 0.0f. The block-quant
+     * scale collapses to 0 so this also covers the max_abs == 0 branch. */
+    for (i = 0; i < K; ++i) a[i] = 0.0f;
+    {
+        eos_status_t s2 = eosi_avx2_matmul_q4_k_int8(a, weights, cv, 1, N, K);
+        CHECK(s2 == EOS_OK,
+              "avx2 matmul_q4_k_int8 returns OK on all-zero activation");
+        CHECK(cv[0] == 0.0f && cv[1] == 0.0f && cv[2] == 0.0f && cv[3] == 0.0f,
+              "avx2 matmul_q4_k_int8 produces 0.0f on all-zero activation (4 cols)");
+    }
+}
 #endif
 
 #if EOSLLM_HAVE_KERNEL_NEON
@@ -1471,6 +1555,7 @@ int main(void) {
     test_gguf_synthetic_roundtrip();
 #if EOSLLM_HAVE_KERNEL_AVX2
     test_avx2_q4_k_parity();
+    test_avx2_q4_k_int8_parity();
 #endif
 #if EOSLLM_HAVE_KERNEL_NEON
     test_neon_q4_k_parity();

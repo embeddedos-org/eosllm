@@ -147,6 +147,7 @@ SRC := \
   src/kernels/scalar/register.c \
   src/kernels/avx2/avx2.c \
   src/kernels/avx2/matmul_q4_k.c \
+  src/kernels/avx2/matmul_q4_k_int8.c \
   src/kernels/avx512/avx512.c \
   src/kernels/neon/neon.c \
   src/kernels/neon/matmul_q4_k.c \

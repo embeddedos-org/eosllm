@@ -9,6 +9,25 @@ release may break the ABI; see `docs/abi.md` for the stability promise.
 
 ### Added
 
+- **AVX2 `matmul_q4_k_int8` fused-int8 path**
+  (`src/kernels/avx2/matmul_q4_k_int8.c`): a second AVX2 implementation
+  of `matmul_q4_k` that keeps the 4-bit weights packed-then-u8 through
+  the inner loop and quantizes the activation to int8 once per
+  super-block (cached on the stack, reused across all N output
+  columns). Inner dot product uses the `_mm256_maddubs_epi16` +
+  `_mm256_madd_epi16` ML primitive pair over u4 × i8 lanes; per-
+  sub-block rescale-and-accumulate completes the
+  `d*sc*sum(q*a) - dmin*m*sum(a)` identity. Wired through the AVX2
+  backend's `matmul_q` dispatcher; the f32-dequant path
+  (`eosi_avx2_matmul_q4_k`) stays callable from the unit suite for
+  tighter (1e-4) parity coverage and is the small-N fallback (N<4) for
+  shapes where the activation block-quantize doesn't amortize. New
+  parity test `test_avx2_q4_k_int8_parity` (5e-3 relative tolerance,
+  N=4 to exercise the cached-activation path; documented in
+  `docs/quant_schemes.md`). Microbench: **+37%–+90% throughput** on
+  the q4_k AVX2 records vs the f32-dequant baseline at production
+  shapes (n=8…512, k up to 4096); n=1 routes to the fallback path
+  with no regression.
 - **Public ABI additions**
   - `eos_free(void *)` (`include/eosllm/eosllm.h`): release a buffer
     the engine allocated (e.g. the `.eosm` bytes from

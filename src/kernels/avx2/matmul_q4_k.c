@@ -158,7 +158,10 @@ eos_status_t eosi_avx2_matmul_q(const float *a, const void *b_q,
                                 uint32_t m, uint32_t n, uint32_t k) {
     switch (b_dtype) {
         case EOS_DT_Q4_K:
-            return eosi_avx2_matmul_q4_k(a, b_q, c, m, n, k);
+            /* The fused-int8 path is the production code path; the
+             * f32-dequant path (eosi_avx2_matmul_q4_k) stays callable
+             * from the unit suite for tighter (1e-4) parity coverage. */
+            return eosi_avx2_matmul_q4_k_int8(a, b_q, c, m, n, k);
         case EOS_DT_Q8_0:
             /* No AVX2 q8_0 yet — fall back to scalar reference. */
             return eosi_scalar_matmul_q8_0(a, b_q, c, m, n, k);

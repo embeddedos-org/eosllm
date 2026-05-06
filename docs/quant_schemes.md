@@ -12,6 +12,20 @@ backend is tested against bit-exactly.
 | q8_0   | `EOS_DT_Q8_0`  | 32          | 34          | Full: dequant + quant + matmul (GGUF-compat: `f16` scale + 32 `int8`). |
 | q4_k   | `EOS_DT_Q4_K`  | 256         | 144         | Dequant + matmul implemented (GGUF-compat super-block). Quantize is convert-tool-only. |
 
+### AVX2 `matmul_q4_k` paths
+
+The AVX2 backend ships two implementations of the Q4_K matmul kernel,
+both bit-compared against the scalar reference oracle on every PR:
+
+| Function                            | Tolerance vs scalar | Notes |
+|-------------------------------------|---------------------|-------|
+| `eosi_avx2_matmul_q4_k`             | 1e-4 absolute       | Per-element f32 dequant + FMA. Always exact within float ULP × K. |
+| `eosi_avx2_matmul_q4_k_int8`        | 5e-3 relative       | Activation block-quantized to int8 (per 32-element sub-block, scale = max\|a\|/127). Adds ~1 i8 ULP / 127 ≈ 0.4% relative noise per sub-block; the residual after summing 8 sub-blocks per super-block stays within 5e-3 of the scalar result for typical activations. The vtable dispatcher (`eosi_avx2_matmul_q`) routes Q4_K to the int8 path for n≥4 (where activation block-quantize amortizes), and falls back to the f32-dequant path for n<4. |
+
+The int8 path delivers **+37%–+90%** throughput vs the f32-dequant
+path on production shapes (n≥8, k up to 4096) on Threadripper-class
+x86; `make bench-diff` re-evaluates this on every PR.
+
 ## Implemented (Phase 2)
 
 | Scheme | dtype enum     | Block elems | Bytes/block | Status                              |

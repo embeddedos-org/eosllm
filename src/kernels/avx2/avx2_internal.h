@@ -22,8 +22,20 @@ eos_status_t eosi_avx2_matmul_q4_k(const float *a, const void *b_q4,
                                    float *c,
                                    uint32_t m, uint32_t n, uint32_t k);
 
+/* Fused-int8 Q4_K matmul. Same contract as eosi_avx2_matmul_q4_k but
+ * keeps weights packed-then-u8 through the inner loop and quantizes
+ * the activation to int8 once per super-block, reusing the cached int8
+ * lanes across all N output columns. ~2x faster than the f32-dequant
+ * path on AVX2 hosts. Activation block-quantization adds a known
+ * per-sub-block rounding error of ~5e-3 relative; documented in
+ * docs/quant_schemes.md. */
+eos_status_t eosi_avx2_matmul_q4_k_int8(const float *a, const void *b_q4,
+                                        float *c,
+                                        uint32_t m, uint32_t n, uint32_t k);
+
 /* Dtype-dispatching matmul_q for the AVX2 backend's vtable slot.
- * Q4_K → AVX2 fast path; Q8_0 → scalar (no AVX2 impl yet); other → unsupported. */
+ * Q4_K → AVX2 int8 fused path; Q8_0 → scalar (no AVX2 impl yet);
+ * other → unsupported. */
 eos_status_t eosi_avx2_matmul_q(const float *a, const void *b_q,
                                 eos_dtype_t b_dtype,
                                 float *c,
