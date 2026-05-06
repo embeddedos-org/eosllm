@@ -189,7 +189,7 @@ LIB := libeosllm.a
 # ---------------------------------------------------------------------
 # Top-level targets
 # ---------------------------------------------------------------------
-.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors
+.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors check-includes
 
 all: lib
 
@@ -375,6 +375,10 @@ smoke-all: cli
 	o=$$($(CLI_BIN) --smoke-bad-magic); \
 	echo "$$o" | grep -q "last_error: .*bad magic" \
 	  || { echo "FAIL: --smoke-bad-magic missing expected last_error context"; echo "$$o"; exit 1; }; \
+	echo "--- smoke-empty-stream ---"; \
+	o=$$($(CLI_BIN) --smoke-empty-stream); \
+	echo "$$o" | grep -q "last_error: .*stream read failed" \
+	  || { echo "FAIL: --smoke-empty-stream missing expected last_error context"; echo "$$o"; exit 1; }; \
 	echo "--- last-error ---"; \
 	o=$$($(CLI_BIN) --last-error); \
 	echo "$$o" | grep -q "last_error: eos_model_open: os.file_open failed" \
@@ -389,7 +393,7 @@ smoke-all: cli
 	o=$$(bash tests/fuzz/test_metadata.sh 2>&1); \
 	echo "$$o" | grep -q '"general.architecture": "smoke"' \
 	  || { echo "FAIL: --metadata smoke missing architecture key"; echo "$$o"; exit 1; }; \
-	echo "smoke-all: OK (5 variants, expected output verified in each)"
+	echo "smoke-all: OK (6 variants, expected output verified in each)"
 
 # all-checks: one-command "is the tree healthy" gate. Chains every
 # correctness + lifecycle + sanitizer + perf-regression check that
@@ -407,6 +411,7 @@ all-checks:
 	echo "==== make smoke-all ===="       ; $(MAKE) smoke-all; \
 	echo "==== make determinism ===="     ; $(MAKE) determinism; \
 	echo "==== make check-errors ===="    ; $(MAKE) check-errors; \
+	echo "==== make check-includes ====" ; $(MAKE) check-includes; \
 	echo "==== make sanitize ===="        ; $(MAKE) sanitize; \
 	echo "==== make sanitize-cli ===="    ; $(MAKE) sanitize-cli; \
 	echo "==== make sanitize-bench ===="  ; $(MAKE) sanitize-bench; \
@@ -423,6 +428,13 @@ all-checks:
 # tools/check_error_strings.sh for `make check-errors` ergonomics.
 check-errors:
 	@bash tools/check_error_strings.sh
+
+# Architectural firewall: src/ files cannot include from tests/,
+# tools/, or build/. Catches accidental dependency leaks before they
+# compound (a single src/foo.c #include "../../tools/bar.h" would
+# tie the library to tooling internals).
+check-includes:
+	@bash tools/check_includes.sh
 
 # Self-documenting target reference. Mirror of the table in
 # docs/architecture.md; keep them in sync when adding new targets.

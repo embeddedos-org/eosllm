@@ -177,6 +177,16 @@ jobs:
           path: docs/benchmarks/host.json
           if-no-files-found: error
 
+  static-checks:
+    name: ubuntu / static checks (error uniqueness + include firewall)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: make check-errors
+        run: make check-errors
+      - name: make check-includes
+        run: make check-includes
+
   smoke-cli:
     name: ubuntu / cli lifecycle smoke (synthetic GGUF)
     runs-on: ubuntu-latest

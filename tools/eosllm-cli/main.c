@@ -29,6 +29,7 @@ static void usage(void) {
         "                  [--scheduler greedy] [--ctx N]\n"
         "       eosllm-cli --smoke\n"
         "       eosllm-cli --smoke-bad-magic\n"
+        "       eosllm-cli --smoke-empty-stream\n"
         "       eosllm-cli --last-error\n"
         "       eosllm-cli --caps\n"
         "       eosllm-cli --metadata <path.gguf>\n"
@@ -239,6 +240,7 @@ int main(int argc, char **argv) {
     int         max_ctx    = 2048;
     int         smoke      = 0;
     int         smoke_bad_magic = 0;
+    int         smoke_empty_stream = 0;
     int         show_last_error = 0;
     int         show_caps   = 0;
     int         show_version = 0;
@@ -257,6 +259,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--scheduler") && i + 1 < argc) sched      = argv[++i];
         else if (!strcmp(argv[i], "--smoke"))                     smoke      = 1;
         else if (!strcmp(argv[i], "--smoke-bad-magic"))           smoke_bad_magic = 1;
+        else if (!strcmp(argv[i], "--smoke-empty-stream"))        smoke_empty_stream = 1;
         else if (!strcmp(argv[i], "--last-error"))                 show_last_error = 1;
         else if (!strcmp(argv[i], "--caps"))                       show_caps  = 1;
         else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-V"))
@@ -274,6 +277,33 @@ int main(int argc, char **argv) {
         fprintf(stdout, "eosllm %s abi=%d\n",
                 eos_version_string(), eos_abi_version());
         return 0;
+    }
+
+    if (smoke_empty_stream) {
+        /* Negative-path: 0-byte stream. Reader should reject at the
+         * 4-byte magic read. */
+        const eos_format_vt_t *vt;
+        eos_status_t rc = eos_init_defaults();
+        if (rc != EOS_OK) {
+            fprintf(stderr, "init: %s\n", eos_status_str(rc)); return 1;
+        }
+        vt = find_gguf_vt();
+        if (vt == NULL) { fprintf(stderr, "gguf vt not registered\n"); return 1; }
+        {
+            mem_t        mst = { (const uint8_t *)"", 0, 0 };
+            eos_stream_t st  = { &mst, m_read, m_seek, m_size, m_close };
+            eos_model_t *bm  = NULL;
+            const char  *e;
+            rc = vt->probe(&st);
+            fprintf(stdout, "probe(empty):     %s\n", eos_status_str(rc));
+            (void)st.seek(&mst, 0);
+            rc = vt->open(&st, &bm);
+            e  = eos_last_error();
+            fprintf(stdout, "open(empty):      %s\n", eos_status_str(rc));
+            fprintf(stdout, "last_error:       %s\n", e ? e : "(null)");
+            if (bm != NULL) eos_model_close(bm);
+            return (rc == EOS_OK) ? 1 : 0;
+        }
     }
 
     if (show_caps) {
