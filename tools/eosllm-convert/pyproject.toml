@@ -1,0 +1,20 @@
+[project]
+name = "eosllm-convert"
+version = "0.1.0"
+description = "Convert HuggingFace / GGUF / safetensors models into eosllm's native .eosm format."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "safetensors>=0.4.0",
+    "gguf>=0.9.0",
+    "numpy>=1.26.0",
+    "torch>=2.1.0",
+]
+
+[project.scripts]
+eosllm-convert = "eosllm_convert.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
