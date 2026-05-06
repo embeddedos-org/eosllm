@@ -30,6 +30,8 @@ static void usage(void) {
         "       eosllm-cli --smoke\n"
         "       eosllm-cli --smoke-bad-magic\n"
         "       eosllm-cli --last-error\n"
+        "       eosllm-cli --caps\n"
+        "       eosllm-cli --metadata <path.gguf>\n"
         "\n"
         "Phase 1 generates greedy text from a Llama-class GGUF.\n"
         "--smoke runs the full session lifecycle against an in-memory\n"
@@ -234,6 +236,8 @@ int main(int argc, char **argv) {
     int         smoke      = 0;
     int         smoke_bad_magic = 0;
     int         show_last_error = 0;
+    int         show_caps   = 0;
+    const char *meta_path   = NULL;
     int         i;
     eos_status_t s;
     eos_model_t   *m  = NULL;
@@ -249,12 +253,115 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--smoke"))                     smoke      = 1;
         else if (!strcmp(argv[i], "--smoke-bad-magic"))           smoke_bad_magic = 1;
         else if (!strcmp(argv[i], "--last-error"))                 show_last_error = 1;
+        else if (!strcmp(argv[i], "--caps"))                       show_caps  = 1;
+        else if (!strcmp(argv[i], "--metadata") && i + 1 < argc)  meta_path  = argv[++i];
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h"))
             { usage(); return 0; }
         else { usage(); return 2; }
     }
 
     if (smoke) return run_smoke();
+
+    if (show_caps) {
+        eos_caps_t c;
+        eos_status_t init_rc = eos_init_defaults();
+        if (init_rc != EOS_OK) {
+            fprintf(stderr, "init: %s\n", eos_status_str(init_rc)); return 1;
+        }
+        if (eos_caps(&c) != EOS_OK) {
+            fprintf(stderr, "eos_caps failed\n"); return 1;
+        }
+        fprintf(stdout, "{\n");
+        fprintf(stdout, "  \"library_version\": \"%s\",\n", eos_version_string());
+        fprintf(stdout, "  \"abi_version\": %d,\n",          eos_abi_version());
+        fprintf(stdout, "  \"compile_time\": {\n");
+        fprintf(stdout, "    \"posix\": %u, \"zephyr\": %u, \"freertos\": %u, \"baremetal\": %u,\n",
+                c.have_posix, c.have_zephyr, c.have_freertos, c.have_baremetal);
+        fprintf(stdout, "    \"threads\": %u,\n", c.have_threads);
+        fprintf(stdout, "    \"kernels\": { \"scalar\": %u, \"avx2\": %u, \"avx512\": %u, "
+                "\"neon\": %u, \"sve\": %u, \"rvv\": %u, \"hvx\": %u, \"npu\": %u },\n",
+                c.have_k_scalar, c.have_k_avx2, c.have_k_avx512, c.have_k_neon,
+                c.have_k_sve, c.have_k_rvv, c.have_k_hvx, c.have_k_npu);
+        fprintf(stdout, "    \"quants\": { \"q8_0\": %u, \"q4_k\": %u, \"q2_k\": %u, "
+                "\"q1_58\": %u, \"mixed\": %u, \"calibrated\": %u },\n",
+                c.have_q_q8_0, c.have_q_q4_k, c.have_q_q2_k,
+                c.have_q_q1_58, c.have_q_mixed, c.have_q_calibrtd);
+        fprintf(stdout, "    \"modalities\": { \"text\": %u, \"vision\": %u, \"audio\": %u },\n",
+                c.have_m_text, c.have_m_vision, c.have_m_audio);
+        fprintf(stdout, "    \"tokenizers\": { \"bpe\": %u, \"spm\": %u },\n",
+                c.have_t_bpe, c.have_t_spm);
+        fprintf(stdout, "    \"formats\": { \"eosm\": %u, \"gguf\": %u },\n",
+                c.have_f_eosm, c.have_f_gguf);
+        fprintf(stdout, "    \"schedulers\": { \"greedy\": %u, \"deadline\": %u, \"batched\": %u }\n",
+                c.have_s_greedy, c.have_s_deadline, c.have_s_batched);
+        fprintf(stdout, "  },\n");
+        fprintf(stdout, "  \"runtime_bits\": {\n");
+        fprintf(stdout, "    \"avx2\":   %u,\n", (c.runtime_bits & EOS_CAPS_RT_AVX2)   ? 1u : 0u);
+        fprintf(stdout, "    \"avx512\": %u,\n", (c.runtime_bits & EOS_CAPS_RT_AVX512) ? 1u : 0u);
+        fprintf(stdout, "    \"neon\":   %u,\n", (c.runtime_bits & EOS_CAPS_RT_NEON)   ? 1u : 0u);
+        fprintf(stdout, "    \"sve\":    %u,\n", (c.runtime_bits & EOS_CAPS_RT_SVE)    ? 1u : 0u);
+        fprintf(stdout, "    \"rvv\":    %u,\n", (c.runtime_bits & EOS_CAPS_RT_RVV)    ? 1u : 0u);
+        fprintf(stdout, "    \"hvx\":    %u,\n", (c.runtime_bits & EOS_CAPS_RT_HVX)    ? 1u : 0u);
+        fprintf(stdout, "    \"npu\":    %u\n",  (c.runtime_bits & EOS_CAPS_RT_NPU)    ? 1u : 0u);
+        fprintf(stdout, "  },\n");
+        fprintf(stdout, "  \"eosm_max_version\": %u\n", c.eosm_max_version);
+        fprintf(stdout, "}\n");
+        return 0;
+    }
+
+    if (meta_path != NULL) {
+        /* AZ: dump every known metadata key from a real GGUF as JSON.
+         * Pure pass-through of public ABI accessors — proves the
+         * surface is sufficient for tooling without engine internals. */
+        eos_model_t *mm = NULL;
+        eos_status_t rc = eos_init_defaults();
+        if (rc != EOS_OK) { fprintf(stderr, "init: %s\n", eos_status_str(rc)); return 1; }
+        rc = eos_model_open(meta_path, &mm);
+        if (rc != EOS_OK) {
+            fprintf(stderr, "open(%s): %s — %s\n", meta_path, eos_status_str(rc),
+                    eos_last_error() ? eos_last_error() : "(no context)");
+            return 1;
+        }
+        fprintf(stdout, "{\n  \"path\": \"%s\",\n  \"num_tensors\": %zu,\n  \"metadata\": {\n",
+                meta_path, eos_model_num_tensors(mm));
+        {
+            /* Walk a fixed list of well-known Llama / Qwen / generic
+             * keys. Each accessor is the public eos_model_meta_*; if
+             * the key is missing the reader returns NULL/EOS_E_NOT_FOUND
+             * and we skip it. Output is JSON. */
+            static const char *str_keys[] = {
+                "general.architecture", "general.name", "general.author",
+                "general.license", "general.url", "general.file_type",
+                "tokenizer.ggml.model", "tokenizer.ggml.pre",
+                NULL,
+            };
+            static const char *u64_keys[] = {
+                "general.alignment", "general.quantization_version",
+                "tokenizer.ggml.bos_token_id", "tokenizer.ggml.eos_token_id",
+                "tokenizer.ggml.unknown_token_id", "tokenizer.ggml.padding_token_id",
+                NULL,
+            };
+            int first = 1;
+            const char **k;
+            for (k = str_keys; *k != NULL; ++k) {
+                const char *v = eos_model_meta_str(mm, *k);
+                if (v == NULL) continue;
+                if (!first) fprintf(stdout, ",\n");
+                fprintf(stdout, "    \"%s\": \"%s\"", *k, v);
+                first = 0;
+            }
+            for (k = u64_keys; *k != NULL; ++k) {
+                uint64_t v = 0;
+                if (eos_model_meta_u64(mm, *k, &v) != EOS_OK) continue;
+                if (!first) fprintf(stdout, ",\n");
+                fprintf(stdout, "    \"%s\": %llu", *k, (unsigned long long)v);
+                first = 0;
+            }
+            fprintf(stdout, "\n  }\n}\n");
+        }
+        eos_model_close(mm);
+        return 0;
+    }
 
     if (smoke_bad_magic) {
         /* Demonstrate the GGUF reader's negative path through the CLI:
