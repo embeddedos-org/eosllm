@@ -1,0 +1,73 @@
+# build/config.mk.in — eosllm feature flags
+#
+# Each EOSLLM_HAVE_* flag is either 0 or 1. The top-level Makefile
+# turns these into -DEOSLLM_HAVE_FOO=1 macros and into the list of .c
+# files that get compiled in.
+#
+# Defaults are tuned to produce a runnable host build with `make` and
+# nothing else. Override on the command line:
+#
+#     make EOSLLM_HAVE_KERNEL_AVX2=1 EOSLLM_HAVE_QUANT_Q4_K=1
+#
+# or copy this file to build/config.mk and edit there.
+
+# ---------------------------------------------------------------------
+# OS shims
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_POSIX        ?= 1
+EOSLLM_HAVE_ZEPHYR       ?= 0
+EOSLLM_HAVE_FREERTOS     ?= 0
+EOSLLM_HAVE_BAREMETAL    ?= 0
+
+# ---------------------------------------------------------------------
+# Threading. OFF by default so MCU builds stay single-threaded.
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_THREADS      ?= 0
+
+# ---------------------------------------------------------------------
+# Kernel backends. Scalar is always on; it is the oracle.
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_KERNEL_SCALAR ?= 1
+EOSLLM_HAVE_KERNEL_AVX2   ?= 0
+EOSLLM_HAVE_KERNEL_AVX512 ?= 0
+EOSLLM_HAVE_KERNEL_NEON   ?= 0
+EOSLLM_HAVE_KERNEL_SVE    ?= 0
+EOSLLM_HAVE_KERNEL_RVV    ?= 0
+EOSLLM_HAVE_KERNEL_HVX    ?= 0
+EOSLLM_HAVE_KERNEL_NPU    ?= 0
+
+# ---------------------------------------------------------------------
+# Quant schemes
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_QUANT_Q8_0       ?= 1
+EOSLLM_HAVE_QUANT_Q4_K       ?= 1
+EOSLLM_HAVE_QUANT_Q2_K       ?= 0
+EOSLLM_HAVE_QUANT_Q1_58      ?= 1
+EOSLLM_HAVE_QUANT_MIXED      ?= 1
+EOSLLM_HAVE_QUANT_CALIBRATED ?= 1
+
+# ---------------------------------------------------------------------
+# Modalities
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_MODALITY_TEXT   ?= 1
+EOSLLM_HAVE_MODALITY_VISION ?= 0
+EOSLLM_HAVE_MODALITY_AUDIO  ?= 0
+
+# ---------------------------------------------------------------------
+# Tokenizers
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_TOKENIZER_BPE ?= 1
+EOSLLM_HAVE_TOKENIZER_SPM ?= 0
+
+# ---------------------------------------------------------------------
+# File formats
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_FORMAT_EOSM ?= 1
+EOSLLM_HAVE_FORMAT_GGUF ?= 1
+
+# ---------------------------------------------------------------------
+# Schedulers
+# ---------------------------------------------------------------------
+EOSLLM_HAVE_SCHED_GREEDY   ?= 1
+EOSLLM_HAVE_SCHED_DEADLINE ?= 0
+EOSLLM_HAVE_SCHED_BATCHED  ?= 0
