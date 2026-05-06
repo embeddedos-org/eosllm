@@ -1,0 +1,7 @@
+# Test data files (model weights) are not stored in the repo.
+# Run ./tools/fetch_test_models.sh from the repo root to populate.
+*.gguf
+*.eosm
+*.bin
+*.safetensors
+*.pt
