@@ -17,6 +17,10 @@ eos_status_t eos_init_defaults(void) {
     eosi_registry_t *r = eosi_registry();
     eos_status_t s;
 
+    /* AP contract: clear thread-local last-error so EOS_OK leaves the
+     * slot empty (matches every other public entry point). */
+    eosi_set_error(NULL);
+
     /* Idempotent: each register_all pushes into a fixed table. Without
      * this guard a second call would silently double-register every
      * built-in module. */

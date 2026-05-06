@@ -10,6 +10,9 @@
 #include "internal.h"
 
 eos_status_t eos_caps(eos_caps_t *out) {
+    /* AP contract: clear thread-local last-error so EOS_OK leaves the
+     * slot empty (matches every other public entry point). */
+    eosi_set_error(NULL);
     if (out == NULL) return EOS_E_INVALID_ARG;
 
     memset(out, 0, sizeof(*out));

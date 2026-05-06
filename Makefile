@@ -189,7 +189,7 @@ LIB := libeosllm.a
 # ---------------------------------------------------------------------
 # Top-level targets
 # ---------------------------------------------------------------------
-.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks
+.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help
 
 all: lib
 
@@ -379,7 +379,17 @@ smoke-all: cli
 	o=$$($(CLI_BIN) --last-error); \
 	echo "$$o" | grep -q "last_error: eos_model_open: os.file_open failed" \
 	  || { echo "FAIL: --last-error missing expected last_error context"; echo "$$o"; exit 1; }; \
-	echo "smoke-all: OK (3 variants, expected last_error context verified in each)"
+	echo "--- caps ---"; \
+	o=$$($(CLI_BIN) --caps); \
+	echo "$$o" | grep -q '"library_version"' \
+	  || { echo "FAIL: --caps missing library_version"; echo "$$o"; exit 1; }; \
+	echo "$$o" | grep -q '"runtime_bits"' \
+	  || { echo "FAIL: --caps missing runtime_bits"; echo "$$o"; exit 1; }; \
+	echo "--- metadata ---"; \
+	o=$$(bash tests/fuzz/test_metadata.sh 2>&1); \
+	echo "$$o" | grep -q '"general.architecture": "smoke"' \
+	  || { echo "FAIL: --metadata smoke missing architecture key"; echo "$$o"; exit 1; }; \
+	echo "smoke-all: OK (5 variants, expected output verified in each)"
 
 # all-checks: one-command "is the tree healthy" gate. Chains every
 # correctness + lifecycle + sanitizer + perf-regression check that
@@ -406,6 +416,58 @@ all-checks:
 	fi; \
 	echo ""; \
 	echo "all-checks: OK"
+
+# Self-documenting target reference. Mirror of the table in
+# docs/architecture.md; keep them in sync when adding new targets.
+help:
+	@echo "eosllm Makefile targets (run as: make <target>)"
+	@echo ""
+	@echo "  Build + test:"
+	@echo "    all              build libeosllm.a (default)"
+	@echo "    lib              same as 'all'"
+	@echo "    test             build + run unit suite (152 checks on AVX2 hosts)"
+	@echo "    config           print resolved feature-flag values"
+	@echo "    clean            remove all build artifacts"
+	@echo ""
+	@echo "  Lifecycle smoke:"
+	@echo "    smoke            build cli + run --smoke"
+	@echo "    smoke-all        run all 5 cli smoke variants with assertions"
+	@echo "                       (smoke, smoke-bad-magic, last-error, caps, metadata)"
+	@echo ""
+	@echo "  Sanitizer pipelines:"
+	@echo "    sanitize         clean + ASan/UBSan/LeakSan over the unit suite"
+	@echo "    sanitize-cli     same, against the cli smoke"
+	@echo "    sanitize-bench   same, against the matmul microbench"
+	@echo ""
+	@echo "  Determinism + perf:"
+	@echo "    determinism      run unit suite 3x; fail on any stdout drift"
+	@echo "    benchmark        run microbench, write docs/benchmarks/host.json"
+	@echo "    bench-diff       run benchmark + compare to baseline-\$$(HOST_ARCH).json"
+	@echo "                       (BASELINE=path overrides default)"
+	@echo ""
+	@echo "  Fuzzing (libFuzzer):"
+	@echo "    fuzz-eosm        30 s libfuzzer + ASan against .eosm corpus"
+	@echo "    fuzz-gguf        30 s libfuzzer + ASan against GGUF corpus"
+	@echo "    fuzz-corpus      regenerate .eosm seed corpus"
+	@echo "    fuzz-corpus-gguf regenerate GGUF seed corpus"
+	@echo ""
+	@echo "  Tools:"
+	@echo "    tools            build cli + bench + convert"
+	@echo "    cli              build eosllm-cli only"
+	@echo "    bench            build eosllm-bench only"
+	@echo "    convert          build eosllm-convert only"
+	@echo ""
+	@echo "  Umbrella:"
+	@echo "    all-checks       chain test + smoke-all + determinism + sanitize x3 +"
+	@echo "                       bench-diff (if baseline exists). One command for"
+	@echo "                       'is the tree healthy'. ~5 min wall-time."
+	@echo ""
+	@echo "  Common flag overrides (pass on the command line):"
+	@echo "    EOSLLM_HAVE_KERNEL_AVX2=1   force AVX2 backend on (auto on x86_64)"
+	@echo "    EOSLLM_HAVE_KERNEL_NEON=1   force NEON backend on (auto on aarch64)"
+	@echo "    SAN=1 BUILD=debug           build with sanitizers"
+	@echo "    CC=clang                    use clang instead of cc"
+	@echo "    CFLAGS_EXTRA=\"-static\"      extra cflags (cross-compile etc.)"
 
 # Sanitize-cli: smoke under ASan + UBSan + LeakSan. Catches lifecycle
 # bugs (use-after-free across model_close/session_close, leaks in the
