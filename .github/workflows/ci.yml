@@ -5,6 +5,11 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    # Nightly run at 06:00 UTC. Catches drift from
+    # external dependencies (e.g. compiler updates on the GHA
+    # ubuntu-latest image) without slowing PR-gating.
+    - cron: '0 6 * * *'
 
 jobs:
   host-build:
@@ -186,6 +191,19 @@ jobs:
         run: make check-errors
       - name: make check-includes
         run: make check-includes
+
+  nightly-all-checks:
+    name: ubuntu / nightly all-checks (cron only)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang (for sanitize chain)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+      - name: make all-checks
+        run: make CC=clang all-checks
 
   smoke-cli:
     name: ubuntu / cli lifecycle smoke (synthetic GGUF)

@@ -189,7 +189,7 @@ LIB := libeosllm.a
 # ---------------------------------------------------------------------
 # Top-level targets
 # ---------------------------------------------------------------------
-.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors check-includes
+.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors check-includes stat
 
 all: lib
 
@@ -435,6 +435,11 @@ check-errors:
 # tie the library to tooling internals).
 check-includes:
 	@bash tools/check_includes.sh
+
+# Print headline numbers (file/test/site counts + LOC). Useful for
+# changelog generation and "how big is the engine right now" checks.
+stat:
+	@bash tools/stat.sh
 
 # Self-documenting target reference. Mirror of the table in
 # docs/architecture.md; keep them in sync when adding new targets.

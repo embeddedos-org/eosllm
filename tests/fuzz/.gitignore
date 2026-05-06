@@ -4,3 +4,6 @@ push_*.sh
 
 # Local sanitizer helper scripts may also accumulate here.
 run_*_san.sh
+
+# Local debug helper scripts (debug_caps.sh, etc.) — not source.
+debug_*.sh
