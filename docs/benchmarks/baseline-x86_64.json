@@ -1,0 +1,42 @@
+{
+  "library_version": "0.1.0",
+  "abi_version": 1,
+  "backends_probed": {
+    "scalar":     true,
+    "x86_avx2":   true,
+    "x86_avx512": false,
+    "arm_neon":   false
+  },
+  "records": [
+    {"backend":"scalar","op":"matmul_f32","m":1,"n":1,"k":256,"n_iters":10000,"total_ns":7192833,"ns_per_iter":719.3,"giga_ops_per_s":0.71},
+    {"backend":"scalar","op":"matmul_f32","m":1,"n":8,"k":512,"n_iters":10000,"total_ns":113970650,"ns_per_iter":11397.1,"giga_ops_per_s":0.72},
+    {"backend":"scalar","op":"matmul_f32","m":1,"n":64,"k":1024,"n_iters":3814,"total_ns":695405709,"ns_per_iter":182329.8,"giga_ops_per_s":0.72},
+    {"backend":"scalar","op":"matmul_f32","m":1,"n":128,"k":2048,"n_iters":953,"total_ns":696774782,"ns_per_iter":731138.3,"giga_ops_per_s":0.72},
+    {"backend":"scalar","op":"matmul_f32","m":1,"n":512,"k":2048,"n_iters":238,"total_ns":697612626,"ns_per_iter":2931145.5,"giga_ops_per_s":0.72},
+    {"backend":"scalar","op":"matmul_f32","m":1,"n":256,"k":4096,"n_iters":238,"total_ns":695408604,"ns_per_iter":2921884.9,"giga_ops_per_s":0.72},
+    {"backend":"x86_avx2","op":"matmul_f32","m":1,"n":1,"k":256,"n_iters":10000,"total_ns":2296833,"ns_per_iter":229.7,"giga_ops_per_s":2.23},
+    {"backend":"x86_avx2","op":"matmul_f32","m":1,"n":8,"k":512,"n_iters":10000,"total_ns":33193439,"ns_per_iter":3319.3,"giga_ops_per_s":2.47},
+    {"backend":"x86_avx2","op":"matmul_f32","m":1,"n":64,"k":1024,"n_iters":3814,"total_ns":194583725,"ns_per_iter":51018.3,"giga_ops_per_s":2.57},
+    {"backend":"x86_avx2","op":"matmul_f32","m":1,"n":128,"k":2048,"n_iters":953,"total_ns":191271098,"ns_per_iter":200704.2,"giga_ops_per_s":2.61},
+    {"backend":"x86_avx2","op":"matmul_f32","m":1,"n":512,"k":2048,"n_iters":238,"total_ns":192494829,"ns_per_iter":808801.8,"giga_ops_per_s":2.59},
+    {"backend":"x86_avx2","op":"matmul_f32","m":1,"n":256,"k":4096,"n_iters":238,"total_ns":189652529,"ns_per_iter":796859.4,"giga_ops_per_s":2.63},
+    {"backend":"scalar","op":"matmul_q8_0","m":1,"n":1,"k":256,"n_iters":10000,"total_ns":7411401,"ns_per_iter":741.1,"giga_ops_per_s":0.69},
+    {"backend":"scalar","op":"matmul_q8_0","m":1,"n":8,"k":512,"n_iters":10000,"total_ns":116720358,"ns_per_iter":11672.0,"giga_ops_per_s":0.70},
+    {"backend":"scalar","op":"matmul_q8_0","m":1,"n":64,"k":1024,"n_iters":3814,"total_ns":711401096,"ns_per_iter":186523.6,"giga_ops_per_s":0.70},
+    {"backend":"scalar","op":"matmul_q8_0","m":1,"n":128,"k":2048,"n_iters":953,"total_ns":715074266,"ns_per_iter":750340.3,"giga_ops_per_s":0.70},
+    {"backend":"scalar","op":"matmul_q8_0","m":1,"n":512,"k":2048,"n_iters":238,"total_ns":720298367,"ns_per_iter":3026463.7,"giga_ops_per_s":0.69},
+    {"backend":"scalar","op":"matmul_q8_0","m":1,"n":256,"k":4096,"n_iters":238,"total_ns":714565677,"ns_per_iter":3002376.8,"giga_ops_per_s":0.70},
+    {"backend":"scalar","op":"matmul_q4_k","m":1,"n":1,"k":256,"n_iters":10000,"total_ns":7754818,"ns_per_iter":775.5,"giga_ops_per_s":0.66},
+    {"backend":"scalar","op":"matmul_q4_k","m":1,"n":8,"k":512,"n_iters":10000,"total_ns":122354299,"ns_per_iter":12235.4,"giga_ops_per_s":0.67},
+    {"backend":"scalar","op":"matmul_q4_k","m":1,"n":64,"k":1024,"n_iters":3814,"total_ns":735645024,"ns_per_iter":192880.2,"giga_ops_per_s":0.68},
+    {"backend":"scalar","op":"matmul_q4_k","m":1,"n":128,"k":2048,"n_iters":953,"total_ns":736031295,"ns_per_iter":772330.8,"giga_ops_per_s":0.68},
+    {"backend":"scalar","op":"matmul_q4_k","m":1,"n":512,"k":2048,"n_iters":238,"total_ns":734127283,"ns_per_iter":3084568.4,"giga_ops_per_s":0.68},
+    {"backend":"scalar","op":"matmul_q4_k","m":1,"n":256,"k":4096,"n_iters":238,"total_ns":732593163,"ns_per_iter":3078122.5,"giga_ops_per_s":0.68},
+    {"backend":"x86_avx2","op":"matmul_q4_k","m":1,"n":1,"k":256,"n_iters":10000,"total_ns":5700060,"ns_per_iter":570.0,"giga_ops_per_s":0.90},
+    {"backend":"x86_avx2","op":"matmul_q4_k","m":1,"n":8,"k":512,"n_iters":10000,"total_ns":85691186,"ns_per_iter":8569.1,"giga_ops_per_s":0.96},
+    {"backend":"x86_avx2","op":"matmul_q4_k","m":1,"n":64,"k":1024,"n_iters":3814,"total_ns":517744048,"ns_per_iter":135748.3,"giga_ops_per_s":0.97},
+    {"backend":"x86_avx2","op":"matmul_q4_k","m":1,"n":128,"k":2048,"n_iters":953,"total_ns":514345069,"ns_per_iter":539711.5,"giga_ops_per_s":0.97},
+    {"backend":"x86_avx2","op":"matmul_q4_k","m":1,"n":512,"k":2048,"n_iters":238,"total_ns":517242733,"ns_per_iter":2173288.8,"giga_ops_per_s":0.96},
+    {"backend":"x86_avx2","op":"matmul_q4_k","m":1,"n":256,"k":4096,"n_iters":238,"total_ns":514894358,"ns_per_iter":2163421.7,"giga_ops_per_s":0.97}
+  ]
+}
