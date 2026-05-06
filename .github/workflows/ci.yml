@@ -1,0 +1,212 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  host-build:
+    name: ${{ matrix.os }} / ${{ matrix.compiler }} / ${{ matrix.build }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:       [ ubuntu-latest, macos-latest ]
+        compiler: [ gcc, clang ]
+        build:    [ debug, release ]
+        exclude:
+          # macOS runners ship clang as `cc`; gcc is a homebrew alias and we
+          # don't bother installing it here.
+          - os: macos-latest
+            compiler: gcc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          ${{ matrix.compiler }} --version
+          make --version
+
+      - name: Show resolved feature flags
+        run: make CC=${{ matrix.compiler }} BUILD=${{ matrix.build }} config
+
+      - name: Build static library
+        run: make CC=${{ matrix.compiler }} BUILD=${{ matrix.build }} lib
+
+      - name: Build and run unit tests
+        run: make CC=${{ matrix.compiler }} BUILD=${{ matrix.build }} test
+
+      - name: Stripped library size
+        if: matrix.build == 'release'
+        run: |
+          ls -l libeosllm.a
+          # When we add a shared-library target this will report the
+          # stripped binary size; for now it's just the archive size.
+
+  cross-aarch64:
+    name: ubuntu / aarch64 / qemu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cross toolchain and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+
+      - name: Build for aarch64 (static)
+        run: |
+          make CC=aarch64-linux-gnu-gcc BUILD=release \
+               CFLAGS_EXTRA="-static" \
+               LDFLAGS_EXTRA="-static" \
+               lib
+
+      - name: Build and run unit tests under qemu (static)
+        run: |
+          make CC=aarch64-linux-gnu-gcc BUILD=release \
+               CFLAGS_EXTRA="-static" \
+               LDFLAGS_EXTRA="-static" \
+               test
+
+  sanitize:
+    name: ubuntu / clang / asan + ubsan + leaksan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Show toolchain
+        run: clang --version
+
+      - name: Build + run tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1:halt_on_error=1
+        run: make CC=clang sanitize
+
+  determinism:
+    name: ubuntu / determinism (3-iteration bit-identical)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make BUILD=release lib
+
+      - name: Run 3-iteration determinism check
+        run: make BUILD=release determinism
+
+  fuzz-eosm:
+    name: ubuntu / clang / libfuzzer + asan (eosm reader, 30s)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Build seed corpus
+        run: make fuzz-corpus
+
+      - name: Build libFuzzer harness
+        run: make fuzz-eosm
+
+      - name: Run fuzz_eosm for 30 seconds
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1:halt_on_error=1
+        run: |
+          ./tests/fuzz/fuzz_eosm tests/fuzz/corpus \
+            -max_total_time=30 \
+            -print_final_stats=1 \
+            -timeout=5 \
+            -rss_limit_mb=512
+
+  fuzz-gguf:
+    name: ubuntu / clang / libfuzzer + asan (gguf reader, 30s)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Build GGUF seed corpus
+        run: make fuzz-corpus-gguf
+
+      - name: Build libFuzzer harness
+        run: make fuzz-gguf
+
+      - name: Run fuzz_gguf for 30 seconds
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1:halt_on_error=1
+        run: |
+          ./tests/fuzz/fuzz_gguf tests/fuzz/corpus_gguf \
+            -max_total_time=30 \
+            -print_final_stats=1 \
+            -timeout=5 \
+            -rss_limit_mb=512
+
+  benchmark:
+    name: ubuntu / matmul microbenchmark (perf snapshot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build + run benchmark
+        run: make benchmark
+
+      - name: Show JSON
+        run: cat docs/benchmarks/host.json
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ github.sha }}
+          path: docs/benchmarks/host.json
+          if-no-files-found: error
+
+  smoke-cli:
+    name: ubuntu / cli lifecycle smoke (synthetic GGUF)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang (for sanitize-cli)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Build + run all three smoke variants (default build)
+        run: make smoke-all
+
+      - name: Build + run smoke under ASan + UBSan + LeakSan
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1:halt_on_error=1
+        run: make CC=clang sanitize-cli
+
+      - name: Run --smoke-bad-magic + --last-error under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1:halt_on_error=1
+        run: |
+          ./tools/eosllm-cli/eosllm-cli --smoke-bad-magic > /dev/null
+          ./tools/eosllm-cli/eosllm-cli --last-error      > /dev/null
+
+      - name: Build + run bench under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:abort_on_error=1:halt_on_error=1
+        run: make CC=clang sanitize-bench
