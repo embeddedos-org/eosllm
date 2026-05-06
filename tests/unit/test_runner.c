@@ -96,6 +96,18 @@ static void test_version_and_caps(void) {
         if (rt_avx512) CHECK(caps.have_k_avx512 == 1, "rt_avx512 implies have_k_avx512");
         if (rt_neon)   CHECK(caps.have_k_neon   == 1, "rt_neon   implies have_k_neon");
     }
+
+    /* BE contract: eos_caps and eos_init_defaults each clear the
+     * thread-local last_error slot at entry, so EOS_OK leaves it NULL
+     * regardless of any earlier failure. */
+    eosi_set_error("sentinel: should be cleared by eos_caps");
+    CHECK(eos_caps(&caps) == EOS_OK, "eos_caps OK after sentinel");
+    CHECK(eos_last_error() == NULL,
+          "eos_last_error cleared by successful eos_caps");
+    eosi_set_error("sentinel: should be cleared by eos_init_defaults");
+    CHECK(eos_init_defaults() == EOS_OK, "eos_init_defaults OK after sentinel");
+    CHECK(eos_last_error() == NULL,
+          "eos_last_error cleared by successful eos_init_defaults");
 }
 
 static void test_init_defaults(void) {

@@ -1,0 +1,6 @@
+# One-off post-push helper scripts (e.g. push_initial.sh, push_AR.sh).
+# Generated locally to organize commit stacks; not source.
+push_*.sh
+
+# Local sanitizer helper scripts may also accumulate here.
+run_*_san.sh

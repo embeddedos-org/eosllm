@@ -38,7 +38,10 @@ static void usage(void) {
         "synthetic GGUF (no model file required).\n"
         "--last-error triggers a known-failing call and prints both\n"
         "eos_status_str() and eos_last_error() (sanity check for\n"
-        "distro packagers that the TLS path linked correctly).\n");
+        "distro packagers that the TLS path linked correctly).\n"
+        "\n"
+        "Run `make help` from the repo root for the full list of\n"
+        "build / test / sanitize / smoke / benchmark / fuzz targets.\n");
 }
 
 /* ------------------------------------------------------------------ */
