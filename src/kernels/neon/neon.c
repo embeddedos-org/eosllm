@@ -33,6 +33,10 @@ static eos_status_t neon_matmul_f32(const float *a, const float *b, float *c,
             for (p = k4; p < k; ++p) tail += ar[p] * br[p];
 #ifdef __aarch64__
             c[(size_t)i * n + j] = vaddvq_f32(acc) + tail;
+#elif defined(__arm64__) || defined(_M_ARM64)
+            /* Apple/MSVC arm64 also have vaddvq_f32 — the macro name
+             * just isn't __aarch64__ on every toolchain. */
+            c[(size_t)i * n + j] = vaddvq_f32(acc) + tail;
 #else
             {
                 float32x2_t s = vadd_f32(vget_low_f32(acc), vget_high_f32(acc));

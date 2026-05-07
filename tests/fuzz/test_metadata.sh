@@ -3,7 +3,11 @@
 # that --smoke builds in memory to a temp file, then dumping its
 # metadata via the CLI. Exits 0 if the architecture key round-trips.
 set -euo pipefail
-cd /home/spatchava/embeddedos-org/eosllm
+# cd to the repo root so relative paths like tools/eosllm-cli/eosllm-cli
+# resolve regardless of where the script is invoked from. This script
+# lives at tests/fuzz/test_metadata.sh, so the repo root is two
+# levels up.
+cd "$(dirname "$0")/../.."
 
 TMP=$(mktemp -t eosllm_meta_smoke.XXXXXX.gguf)
 trap "rm -f $TMP" EXIT

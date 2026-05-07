@@ -38,11 +38,16 @@ build_one() {
     local outdir="build/$arch"
     mkdir -p "$outdir"
 
-    # Auto-enable matching SIMD backend for each slice.
-    local kernel_flag=""
+    # Explicitly set BOTH SIMD flags per slice. macos-14 runners are
+    # arm64, so when we cross-target x86_64 the Makefile's host-based
+    # auto-detect would otherwise wrongly enable NEON; pin both flags
+    # to the slice's target ISA.
+    local kernel_flags=""
     case "$arch" in
-        arm64)  kernel_flag="EOSLLM_HAVE_KERNEL_NEON=1" ;;
-        x86_64) kernel_flag="EOSLLM_HAVE_KERNEL_AVX2=1" ;;
+        arm64)
+            kernel_flags="EOSLLM_HAVE_KERNEL_NEON=1 EOSLLM_HAVE_KERNEL_AVX2=0" ;;
+        x86_64)
+            kernel_flags="EOSLLM_HAVE_KERNEL_AVX2=1 EOSLLM_HAVE_KERNEL_NEON=0" ;;
     esac
 
     make clean >/dev/null
@@ -50,7 +55,7 @@ build_one() {
     # cc on macOS is clang; -target overrides the default arch.
     make BUILD=release \
          CC="cc -target $target" \
-         $kernel_flag \
+         $kernel_flags \
          lib tools
 
     cp libeosllm.a                       "$outdir/libeosllm.a"

@@ -94,17 +94,28 @@ FLAGS := \
 # ---------------------------------------------------------------------
 HOST_ARCH := $(shell uname -m 2>/dev/null)
 
+# When the user invokes a cross-compiler (CC contains a dash, e.g.
+# aarch64-linux-gnu-gcc, x86_64-w64-mingw32-gcc), the host's
+# /proc/cpuinfo is irrelevant — the *target* may be entirely different.
+# Skip auto-detect in that case; the cross caller is responsible for
+# explicitly setting the right EOSLLM_HAVE_KERNEL_* flag.
+IS_CROSS := $(if $(filter cc gcc clang,$(notdir $(CC))),0,1)
+
 ifeq ($(origin EOSLLM_HAVE_KERNEL_AVX2),file)
-  ifneq (,$(filter $(HOST_ARCH),x86_64 amd64))
-    ifneq ($(shell grep -m1 -o avx2 /proc/cpuinfo 2>/dev/null),)
-      override EOSLLM_HAVE_KERNEL_AVX2 := 1
+  ifeq ($(IS_CROSS),0)
+    ifneq (,$(filter $(HOST_ARCH),x86_64 amd64))
+      ifneq ($(shell grep -m1 -o avx2 /proc/cpuinfo 2>/dev/null),)
+        override EOSLLM_HAVE_KERNEL_AVX2 := 1
+      endif
     endif
   endif
 endif
 
 ifeq ($(origin EOSLLM_HAVE_KERNEL_NEON),file)
-  ifneq (,$(filter $(HOST_ARCH),aarch64 arm64))
-    override EOSLLM_HAVE_KERNEL_NEON := 1
+  ifeq ($(IS_CROSS),0)
+    ifneq (,$(filter $(HOST_ARCH),aarch64 arm64))
+      override EOSLLM_HAVE_KERNEL_NEON := 1
+    endif
   endif
 endif
 
