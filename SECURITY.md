@@ -91,3 +91,59 @@ the source file and test that enforces each. Highlights:
 
 Reporters who follow this policy will be credited in the resulting
 GitHub Security Advisory unless they request anonymity.
+
+## Release signing keys
+
+Starting with **v0.2.0**, every release artifact is checksummed in
+`SHA256SUMS` and (when the maintainer's signing keys are present)
+also signed for offline verification:
+
+- **`SHA256SUMS.minisig`** — detached
+  [minisign](https://jedisct1.github.io/minisign/) signature over
+  `SHA256SUMS`. Verifying with minisign requires no PGP keyring and
+  works on every platform with a single small static binary.
+  Public key fingerprint: **`(populated when v0.2.0 is cut)`**.
+
+- **macOS binaries** are codesigned with
+  *Developer ID Application: embeddedos-org* (Apple Team ID
+  `(populated when v0.2.0 is cut)`) and notarized via Apple's
+  notary service. Verify with:
+
+  ```
+  codesign --verify --deep --strict --verbose=2 eosllm-cli
+  spctl --assess --type execute --verbose eosllm-cli
+  ```
+
+- **Windows binaries** are Authenticode-signed with a SHA-256 cert
+  issued to *embeddedos-org* (cert thumbprint
+  `(populated when v0.2.0 is cut)`) and timestamped via DigiCert's
+  RFC 3161 server. Verify with:
+
+  ```
+  signtool verify /pa /v eosllm-cli.exe
+  ```
+
+The signing-key bootstrap procedure, secret-management policy, and
+operator manual live in
+[`docs/release.md`](docs/release.md).
+
+### Key-rotation policy
+
+- The minisign key has **no expiry**. We rotate when:
+  - the maintainer's secure key storage is replaced, or
+  - a private key is suspected of compromise.
+- Rotation procedure: publish a one-time `KEYS-ROTATION` advisory
+  containing both the old and new public keys + a minisign signature
+  of the new key by the old key. Update `SECURITY.md` with the new
+  fingerprint. The next release uses the new key only.
+- The Apple Developer ID and Windows Authenticode certs have vendor
+  expiries (Apple: 5 years; DigiCert: 1–3 years). Renewal happens
+  at least 60 days before expiry; the new cert thumbprint is
+  documented here in the same release that first uses it.
+
+### Reporting a key compromise
+
+If you suspect any signing key has been compromised, **report it
+through the same channels as a vulnerability** (see *Reporting a
+vulnerability* above). Do **not** open a public issue; the rotation
+procedure must complete before the public advisory.

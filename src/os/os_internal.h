@@ -11,5 +11,7 @@
 eos_status_t eosi_os_use_zephyr   (void);
 eos_status_t eosi_os_use_freertos (void);
 eos_status_t eosi_os_use_baremetal(void);
+eos_status_t eosi_os_use_win32    (void);
+eos_status_t eosi_os_use_wasm     (void);
 
 #endif

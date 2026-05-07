@@ -65,10 +65,11 @@ endif
 # ---------------------------------------------------------------------
 FLAGS := \
   EOSLLM_HAVE_POSIX EOSLLM_HAVE_ZEPHYR EOSLLM_HAVE_FREERTOS EOSLLM_HAVE_BAREMETAL \
+  EOSLLM_HAVE_WIN32 EOSLLM_HAVE_OS_WASM \
   EOSLLM_HAVE_THREADS \
   EOSLLM_HAVE_KERNEL_SCALAR EOSLLM_HAVE_KERNEL_AVX2 EOSLLM_HAVE_KERNEL_AVX512 \
   EOSLLM_HAVE_KERNEL_NEON EOSLLM_HAVE_KERNEL_SVE EOSLLM_HAVE_KERNEL_RVV \
-  EOSLLM_HAVE_KERNEL_HVX EOSLLM_HAVE_KERNEL_NPU \
+  EOSLLM_HAVE_KERNEL_HVX EOSLLM_HAVE_KERNEL_NPU EOSLLM_HAVE_KERNEL_WASM_SIMD \
   EOSLLM_HAVE_QUANT_Q8_0 EOSLLM_HAVE_QUANT_Q4_K EOSLLM_HAVE_QUANT_Q2_K \
   EOSLLM_HAVE_QUANT_Q1_58 EOSLLM_HAVE_QUANT_MIXED EOSLLM_HAVE_QUANT_CALIBRATED \
   EOSLLM_HAVE_MODALITY_TEXT EOSLLM_HAVE_MODALITY_VISION EOSLLM_HAVE_MODALITY_AUDIO \
@@ -119,6 +120,35 @@ ifeq ($(EOSLLM_HAVE_KERNEL_AVX2),1)
   override CFLAGS += -mavx2 -mfma
 endif
 
+# WASM SIMD128 backend (only meaningful under emcc; no-op elsewhere).
+ifeq ($(EOSLLM_HAVE_KERNEL_WASM_SIMD),1)
+  override CFLAGS += -msimd128
+endif
+
+# Host-OS detection. Drives the default win32-on-windows behaviour and
+# the platform-specific link flags for tools/eosllm-server (-lws2_32 on
+# MinGW / MSVC, nothing extra on POSIX).
+HOST_OS := $(shell uname -s 2>/dev/null)
+IS_WINDOWS := 0
+ifneq (,$(findstring MINGW,$(HOST_OS)))
+  IS_WINDOWS := 1
+endif
+ifneq (,$(findstring MSYS,$(HOST_OS)))
+  IS_WINDOWS := 1
+endif
+ifneq (,$(findstring CYGWIN,$(HOST_OS)))
+  IS_WINDOWS := 1
+endif
+ifeq ($(OS),Windows_NT)
+  IS_WINDOWS := 1
+endif
+
+ifeq ($(IS_WINDOWS),1)
+  SERVER_LDLIBS := -lws2_32
+else
+  SERVER_LDLIBS :=
+endif
+
 # ---------------------------------------------------------------------
 # Sources
 # ---------------------------------------------------------------------
@@ -136,6 +166,8 @@ SRC := \
   src/os/zephyr.c \
   src/os/freertos.c \
   src/os/baremetal.c \
+  src/os/win32.c \
+  src/os/wasm.c \
   src/kernels/scalar/matmul_f32.c \
   src/kernels/scalar/matmul_q8.c \
   src/kernels/scalar/matmul_q4_k.c \
@@ -155,6 +187,7 @@ SRC := \
   src/kernels/rvv/rvv.c \
   src/kernels/hvx/hvx.c \
   src/kernels/npu/npu.c \
+  src/kernels/wasm/wasm.c \
   src/kernels/register_all.c \
   src/quant/q8_0.c \
   src/quant/q4_k.c \
@@ -190,7 +223,7 @@ LIB := libeosllm.a
 # ---------------------------------------------------------------------
 # Top-level targets
 # ---------------------------------------------------------------------
-.PHONY: all lib test tools cli bench convert config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors check-includes stat
+.PHONY: all lib test tools cli bench convert server config clean sanitize determinism fuzz-eosm fuzz-gguf fuzz-corpus fuzz-corpus-gguf benchmark bench-diff sanitize-bench smoke sanitize-cli smoke-all all-checks help check-errors check-includes stat server-smoke
 
 all: lib
 
@@ -219,14 +252,17 @@ $(TEST_BIN): $(TEST_SRC) $(LIB)
 CLI_BIN     := tools/eosllm-cli/eosllm-cli
 BENCH_BIN   := tools/eosllm-bench/eosllm-bench
 CONVERT_BIN := tools/eosllm-convert/eosllm-convert
+SERVER_BIN  := tools/eosllm-server/eosllm-server
 
-tools: cli bench convert
+tools: cli bench convert server
 
 cli: $(CLI_BIN)
 
 bench: $(BENCH_BIN)
 
 convert: $(CONVERT_BIN)
+
+server: $(SERVER_BIN)
 
 $(CLI_BIN): tools/eosllm-cli/main.c $(LIB)
 	$(CC) $(CFLAGS) tools/eosllm-cli/main.c $(LIB) $(LDFLAGS) -lm -o $@
@@ -236,6 +272,9 @@ $(BENCH_BIN): tools/eosllm-bench/main.c $(LIB)
 
 $(CONVERT_BIN): tools/eosllm-convert/main.c $(LIB)
 	$(CC) $(CFLAGS) tools/eosllm-convert/main.c $(LIB) $(LDFLAGS) -lm -o $@
+
+$(SERVER_BIN): tools/eosllm-server/main.c $(LIB)
+	$(CC) $(CFLAGS) tools/eosllm-server/main.c $(LIB) $(LDFLAGS) $(SERVER_LDLIBS) -lm -o $@
 
 # ---------------------------------------------------------------------
 # Show resolved feature flags
@@ -424,6 +463,29 @@ all-checks:
 	echo ""; \
 	echo "all-checks: OK"
 
+# server-smoke: build the HTTP/SSE daemon, start it on a free localhost
+# port in the background, curl /healthz and /caps, kill it, and ensure
+# both responses look right. Mirrors the smoke-all contract: failure
+# in any sub-step exits non-zero. Skipped on Windows hosts (the
+# background-job idiom uses POSIX shell features).
+server-smoke: server
+	@set -e; \
+	port=7787; \
+	$(SERVER_BIN) --port $$port >/tmp/eosllm-server.log 2>&1 & \
+	pid=$$!; \
+	trap "kill $$pid 2>/dev/null || true" EXIT; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+	  if curl -sS "http://127.0.0.1:$$port/healthz" >/dev/null 2>&1; then break; fi; \
+	  sleep 0.2; \
+	done; \
+	hz=$$(curl -sS "http://127.0.0.1:$$port/healthz"); \
+	echo "$$hz" | grep -q "ok" \
+	  || { echo "FAIL: /healthz did not return ok"; echo "$$hz"; cat /tmp/eosllm-server.log; exit 1; }; \
+	cp=$$(curl -sS "http://127.0.0.1:$$port/caps"); \
+	echo "$$cp" | grep -q '"library_version"' \
+	  || { echo "FAIL: /caps missing library_version"; echo "$$cp"; cat /tmp/eosllm-server.log; exit 1; }; \
+	echo "server-smoke: OK"
+
 # Verifies every EOSI_LOG_ERROR("...") string in src/ is unique so
 # eos_last_error() pinpoints the failing site. Wraps
 # tools/check_error_strings.sh for `make check-errors` ergonomics.
@@ -477,10 +539,12 @@ help:
 	@echo "    fuzz-corpus-gguf regenerate GGUF seed corpus"
 	@echo ""
 	@echo "  Tools:"
-	@echo "    tools            build cli + bench + convert"
+	@echo "    tools            build cli + bench + convert + server"
 	@echo "    cli              build eosllm-cli only"
 	@echo "    bench            build eosllm-bench only"
 	@echo "    convert          build eosllm-convert only"
+	@echo "    server           build eosllm-server (HTTP/SSE) only"
+	@echo "    server-smoke     start eosllm-server, curl /healthz + /caps, kill"
 	@echo ""
 	@echo "  Umbrella:"
 	@echo "    all-checks       chain test + smoke-all + determinism + sanitize x3 +"
@@ -507,7 +571,7 @@ sanitize-cli:
 	@echo "sanitize-cli: OK"
 
 clean:
-	rm -f $(OBJ) $(LIB) $(TEST_BIN) $(CLI_BIN) $(BENCH_BIN) $(CONVERT_BIN) \
+	rm -f $(OBJ) $(LIB) $(TEST_BIN) $(CLI_BIN) $(BENCH_BIN) $(CONVERT_BIN) $(SERVER_BIN) \
 	      $(FUZZ_EOSM_BIN) $(FUZZ_SEED_BIN) \
 	      $(FUZZ_GGUF_BIN) $(FUZZ_GGUF_SEED) \
 	      .determinism.run1 .determinism.run2 .determinism.run3

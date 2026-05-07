@@ -7,6 +7,20 @@
 *.exe
 libeosllm.a
 tests/unit/test_runner
+tools/eosllm-cli/eosllm-cli
+tools/eosllm-bench/eosllm-bench
+tools/eosllm-convert/eosllm-convert
+tools/eosllm-server/eosllm-server
+
+# VS Code / browser-extension build outputs
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/bin/
+vscode-extension/*.vsix
+browser-extension/node_modules/
+browser-extension/dist/
+browser-extension/*.zip
+browser-extension/*.xpi
 
 # Local config override
 build/config.mk

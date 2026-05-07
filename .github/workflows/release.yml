@@ -1,39 +1,48 @@
 name: release
 
-# Triggers on a v* tag push (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
-# Builds the library + tools, runs the full PR-gating chain plus
-# nightly chain, packages a source tarball + binary tarball, creates
-# a GitHub Release with both as assets.
+# Triggers on a v* tag push (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
+# Builds signed binaries for 4 platforms (linux x86_64 + aarch64,
+# macOS universal arm64+x86_64, windows x86_64), packages a source
+# tarball, computes SHA256SUMS, optionally minisigns, then publishes a
+# single GitHub Release with everything attached.
 #
 # Inert until a tag is pushed. Manual `workflow_dispatch` is also
-# allowed for dry-run testing without tagging.
+# allowed for dry-run testing without tagging — in that mode the build
+# jobs run but the publish-release job's actual gh-release step is
+# skipped (gated on startsWith(github.ref, 'refs/tags/v')).
+#
+# Per-platform signing/notarization steps are individually gated on
+# their respective secrets being present, so the workflow gracefully
+# degrades to "unsigned binaries shipped" when secrets are absent.
+# Each binary's signing status is reflected in the release notes.
 
 on:
   push:
     tags:
-      - 'v*'
+      # Match only engine version tags like v0.2.0, v1.0.0-rc1.
+      # Extension tags (vscode-v*, browser-v*) have their own
+      # workflows and must not trigger the engine pipeline.
+      - 'v[0-9]*'
   workflow_dispatch: {}
 
 permissions:
   contents: write          # required to create the GitHub release
 
 jobs:
-  release:
-    name: build + verify + publish
+  # ------------------------------------------------------------------
+  # Resolve version once and share with every downstream job.
+  # ------------------------------------------------------------------
+  resolve-version:
+    name: resolve version
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0     # need tags for `git describe`
-
-      - name: Install clang (for sanitize chain)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang
-
+          fetch-depth: 0
       - name: Resolve version
-        id: version
+        id: v
         run: |
           if [ -n "${GITHUB_REF_NAME:-}" ] && [[ "${GITHUB_REF_NAME}" == v* ]]; then
             ver="${GITHUB_REF_NAME#v}"
@@ -43,68 +52,332 @@ jobs:
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $ver"
 
+  # ------------------------------------------------------------------
+  # Linux x86_64 (host build, AVX2 auto-detected by the Makefile)
+  # ------------------------------------------------------------------
+  build-linux-x86_64:
+    name: build linux x86_64
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang (for sanitize chain)
+        run: sudo apt-get update && sudo apt-get install -y clang
       - name: make all-checks
         run: make CC=clang all-checks
-
       - name: Build release tools
-        run: make tools
-
-      - name: Source tarball
+        run: make BUILD=release tools
+      - name: Stage tarball
         run: |
-          v="${{ steps.version.outputs.version }}"
-          mkdir -p dist
-          git archive --format=tar.gz --prefix="eosllm-${v}/" \
-            -o "dist/eosllm-${v}-src.tar.gz" HEAD
-          ls -la dist/
-
-      - name: Binary tarball (linux-x86_64)
-        run: |
-          v="${{ steps.version.outputs.version }}"
+          v="${{ needs.resolve-version.outputs.version }}"
           stage="staging/eosllm-${v}-linux-x86_64"
           mkdir -p "$stage/bin" "$stage/lib" "$stage/include" "$stage/share/doc/eosllm"
           cp tools/eosllm-cli/eosllm-cli       "$stage/bin/"
           cp tools/eosllm-bench/eosllm-bench   "$stage/bin/"
           cp tools/eosllm-convert/eosllm-convert "$stage/bin/" || true
+          cp tools/eosllm-server/eosllm-server "$stage/bin/"
           cp libeosllm.a                       "$stage/lib/"
           cp -r include/eosllm                 "$stage/include/"
           cp LICENSE README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md \
              "$stage/share/doc/eosllm/"
+          mkdir -p dist
           (cd staging && tar czf "../dist/eosllm-${v}-linux-x86_64.tar.gz" \
             "eosllm-${v}-linux-x86_64")
-          ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-linux-x86_64
+          path: dist/*.tar.gz
+          if-no-files-found: error
 
-      - name: Compute artifact checksums
+  # ------------------------------------------------------------------
+  # Linux aarch64 (cross-compile + qemu-tested, mirrors the
+  # cross-aarch64 CI cell pattern in ci.yml)
+  # ------------------------------------------------------------------
+  build-linux-aarch64:
+    name: build linux aarch64
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross toolchain and qemu
         run: |
-          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
-          cat dist/SHA256SUMS
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+      - name: Build for aarch64 (static, NEON)
+        run: |
+          make CC=aarch64-linux-gnu-gcc BUILD=release \
+               EOSLLM_HAVE_KERNEL_NEON=1 \
+               CFLAGS_EXTRA="-static" LDFLAGS_EXTRA="-static" \
+               lib tools
+      - name: Run unit tests under qemu
+        run: |
+          make CC=aarch64-linux-gnu-gcc BUILD=release \
+               EOSLLM_HAVE_KERNEL_NEON=1 \
+               CFLAGS_EXTRA="-static" LDFLAGS_EXTRA="-static" \
+               test
+      - name: Stage tarball
+        run: |
+          v="${{ needs.resolve-version.outputs.version }}"
+          stage="staging/eosllm-${v}-linux-aarch64"
+          mkdir -p "$stage/bin" "$stage/lib" "$stage/include" "$stage/share/doc/eosllm"
+          cp tools/eosllm-cli/eosllm-cli       "$stage/bin/"
+          cp tools/eosllm-bench/eosllm-bench   "$stage/bin/"
+          cp tools/eosllm-convert/eosllm-convert "$stage/bin/" || true
+          cp tools/eosllm-server/eosllm-server "$stage/bin/"
+          cp libeosllm.a                       "$stage/lib/"
+          cp -r include/eosllm                 "$stage/include/"
+          cp LICENSE README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md \
+             "$stage/share/doc/eosllm/"
+          mkdir -p dist
+          (cd staging && tar czf "../dist/eosllm-${v}-linux-aarch64.tar.gz" \
+            "eosllm-${v}-linux-aarch64")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-linux-aarch64
+          path: dist/*.tar.gz
+          if-no-files-found: error
 
+  # ------------------------------------------------------------------
+  # macOS universal (arm64 + x86_64), codesigned + notarized when
+  # Apple credentials are present.
+  # ------------------------------------------------------------------
+  build-macos-universal:
+    name: build macos universal
+    needs: resolve-version
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (arm64 + x86_64 → lipo)
+        run: |
+          v="${{ needs.resolve-version.outputs.version }}"
+          stage="staging/eosllm-${v}-macos-universal"
+          chmod +x tools/release/build_macos_universal.sh
+          tools/release/build_macos_universal.sh "$stage"
+      - name: Codesign + notarize (skipped if Apple secrets missing)
+        if: ${{ env.APPLE_DEVELOPER_ID_CERT_P12_B64 != '' }}
+        env:
+          APPLE_DEVELOPER_ID_CERT_P12_B64: ${{ secrets.APPLE_DEVELOPER_ID_CERT_P12_B64 }}
+          APPLE_DEVELOPER_ID_PASSWORD:     ${{ secrets.APPLE_DEVELOPER_ID_PASSWORD }}
+          APPLE_TEAM_ID:                   ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_NOTARY_KEY_ID:             ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID:          ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_KEY_P8_B64:         ${{ secrets.APPLE_NOTARY_KEY_P8_B64 }}
+        run: |
+          v="${{ needs.resolve-version.outputs.version }}"
+          chmod +x tools/release/sign_and_notarize_macos.sh
+          tools/release/sign_and_notarize_macos.sh \
+              "staging/eosllm-${v}-macos-universal/bin"
+      - name: Stage tarball
+        run: |
+          v="${{ needs.resolve-version.outputs.version }}"
+          mkdir -p dist
+          (cd staging && tar czf "../dist/eosllm-${v}-macos-universal.tar.gz" \
+            "eosllm-${v}-macos-universal")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-macos-universal
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Windows x86_64 — MinGW-w64 (msys2/mingw64 environment), Authenticode
+  # signed via signtool when Windows cert secret is present.
+  # ------------------------------------------------------------------
+  build-windows-x86_64:
+    name: build windows x86_64
+    needs: resolve-version
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+      - name: Build (mingw64, win32 shim, AVX2)
+        run: |
+          mingw32-make BUILD=release \
+            EOSLLM_HAVE_WIN32=1 \
+            EOSLLM_HAVE_POSIX=0 \
+            EOSLLM_HAVE_KERNEL_AVX2=1 \
+            CFLAGS_EXTRA="-DWIN32_LEAN_AND_MEAN" \
+            LDFLAGS_EXTRA="-static -static-libgcc -lws2_32" \
+            lib tools
+      - name: Smoke test
+        run: |
+          ./tools/eosllm-cli/eosllm-cli --version
+          ./tools/eosllm-cli/eosllm-cli --caps | head -5
+      - name: Stage zip
+        shell: pwsh
+        run: |
+          $v = "${{ needs.resolve-version.outputs.version }}"
+          $stage = "staging/eosllm-${v}-windows-x86_64"
+          New-Item -ItemType Directory -Force -Path "$stage/bin","$stage/lib","$stage/include/eosllm","$stage/share/doc/eosllm" | Out-Null
+          Copy-Item tools/eosllm-cli/eosllm-cli.exe       "$stage/bin/"
+          Copy-Item tools/eosllm-bench/eosllm-bench.exe   "$stage/bin/" -ErrorAction SilentlyContinue
+          Copy-Item tools/eosllm-convert/eosllm-convert.exe "$stage/bin/" -ErrorAction SilentlyContinue
+          Copy-Item tools/eosllm-server/eosllm-server.exe "$stage/bin/"
+          Copy-Item libeosllm.a                            "$stage/lib/"
+          Copy-Item -Recurse include/eosllm/*              "$stage/include/eosllm/"
+          Copy-Item LICENSE,README.md,CHANGELOG.md,SECURITY.md,CONTRIBUTING.md "$stage/share/doc/eosllm/"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+      - name: Authenticode sign (skipped if Windows cert missing)
+        if: ${{ env.WINDOWS_CERT_PFX_B64 != '' }}
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_B64:  ${{ secrets.WINDOWS_CERT_PFX_B64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $v = "${{ needs.resolve-version.outputs.version }}"
+          pwsh -File tools/release/sign_windows.ps1 -StagingDir "staging/eosllm-${v}-windows-x86_64/bin"
+      - name: Zip
+        shell: pwsh
+        run: |
+          $v = "${{ needs.resolve-version.outputs.version }}"
+          Compress-Archive -Path "staging/eosllm-${v}-windows-x86_64" -DestinationPath "dist/eosllm-${v}-windows-x86_64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-windows-x86_64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Source tarball (lifted verbatim from the previous workflow).
+  # ------------------------------------------------------------------
+  build-source-tarball:
+    name: build source tarball
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: git archive
+        run: |
+          v="${{ needs.resolve-version.outputs.version }}"
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="eosllm-${v}/" \
+            -o "dist/eosllm-${v}-src.tar.gz" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-src
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # WASM stub job — Phase F is deferred. Intentionally fails fast so
+  # the slot is reserved and the workflow surfaces "this is on the
+  # roadmap" instead of silently being absent.
+  # ------------------------------------------------------------------
+  wasm-stub:
+    name: wasm-stub (deferred to Phase F)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    if: false
+    steps:
+      - run: |
+          echo "WASM build is on the deferred list. See the production"
+          echo "release pipeline plan, Phase F: requires a wasm SIMD"
+          echo "matmul kernel + emcc toolchain integration + IndexedDB"
+          echo "model-cache layer. Track the work in CHANGELOG.md under"
+          echo "the [Unreleased] section."
+          exit 1
+
+  # ------------------------------------------------------------------
+  # Aggregator: download every platform's artifact, compute SHA256SUMS,
+  # publish to the GitHub Release. The actual gh-release step is gated
+  # on startsWith(github.ref, 'refs/tags/v') so workflow_dispatch dry
+  # runs build everything but don't publish.
+  # ------------------------------------------------------------------
+  publish-release:
+    name: publish release
+    needs:
+      - resolve-version
+      - build-linux-x86_64
+      - build-linux-aarch64
+      - build-macos-universal
+      - build-windows-x86_64
+      - build-source-tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten artifacts into dist/
+        run: |
+          mkdir -p dist
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp -v {} dist/ \;
+          ls -la dist/
+      - name: Compute SHA256SUMS
+        run: |
+          (cd dist && sha256sum * > SHA256SUMS)
+          cat dist/SHA256SUMS
+      - name: minisign artifacts (skipped if MINISIGN_KEY missing)
+        if: ${{ env.MINISIGN_KEY != '' }}
+        env:
+          MINISIGN_KEY:      ${{ secrets.MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          KEY_PATH="$(mktemp)"
+          printf '%s' "$MINISIGN_KEY" > "$KEY_PATH"
+          (cd dist && \
+            echo "$MINISIGN_PASSWORD" | minisign -S -s "$KEY_PATH" -m SHA256SUMS)
+          rm -f "$KEY_PATH"
+          ls -la dist/SHA256SUMS*
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: eosllm ${{ steps.version.outputs.version }}
+          name: eosllm ${{ needs.resolve-version.outputs.version }}
           body: |
-            See [CHANGELOG.md](https://github.com/embeddedos-org/eosllm/blob/v${{ steps.version.outputs.version }}/CHANGELOG.md) for the full notes.
+            See [CHANGELOG.md](https://github.com/embeddedos-org/eosllm/blob/v${{ needs.resolve-version.outputs.version }}/CHANGELOG.md) for the full notes.
 
-            **Verification**
+            ## Verification
 
             ```
             sha256sum --check SHA256SUMS
             ```
 
-            **Reproducible build**
+            If `SHA256SUMS.minisig` is present, you can also verify with
+            [minisign](https://jedisct1.github.io/minisign/) using the
+            release-signing public key documented in
+            [SECURITY.md](https://github.com/embeddedos-org/eosllm/blob/v${{ needs.resolve-version.outputs.version }}/SECURITY.md):
+
+            ```
+            minisign -V -p eosllm-release.pub -m SHA256SUMS
+            ```
+
+            ## Platform notes
+
+            - **macOS**: universal arm64+x86_64 binary. If
+              `SHA256SUMS` references the binary as **unsigned**, the
+              maintainer's Apple Developer ID was not present at build
+              time; see [docs/release.md](https://github.com/embeddedos-org/eosllm/blob/v${{ needs.resolve-version.outputs.version }}/docs/release.md#unsigned-binaries) for the
+              gatekeeper-bypass procedure.
+            - **Windows**: Authenticode-signed when shipped; otherwise
+              SmartScreen will warn on first launch.
+            - **Linux aarch64**: built with `gcc-aarch64-linux-gnu`
+              and validated under `qemu-user-static` on every release.
+
+            ## Reproducible build
 
             From the source tarball:
 
             ```
-            tar xzf eosllm-${{ steps.version.outputs.version }}-src.tar.gz
-            cd eosllm-${{ steps.version.outputs.version }}
-            make test               # 156/156 should pass on AVX2 x86_64
+            tar xzf eosllm-${{ needs.resolve-version.outputs.version }}-src.tar.gz
+            cd eosllm-${{ needs.resolve-version.outputs.version }}
             make all-checks         # full ~5 min health gate
             ```
           files: |
-            dist/eosllm-${{ steps.version.outputs.version }}-src.tar.gz
-            dist/eosllm-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz
-            dist/SHA256SUMS
+            dist/*
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

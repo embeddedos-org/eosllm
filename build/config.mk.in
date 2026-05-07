@@ -18,6 +18,8 @@ EOSLLM_HAVE_POSIX        ?= 1
 EOSLLM_HAVE_ZEPHYR       ?= 0
 EOSLLM_HAVE_FREERTOS     ?= 0
 EOSLLM_HAVE_BAREMETAL    ?= 0
+EOSLLM_HAVE_WIN32        ?= 0
+EOSLLM_HAVE_OS_WASM      ?= 0
 
 # ---------------------------------------------------------------------
 # Threading. OFF by default so MCU builds stay single-threaded.
@@ -35,6 +37,7 @@ EOSLLM_HAVE_KERNEL_SVE    ?= 0
 EOSLLM_HAVE_KERNEL_RVV    ?= 0
 EOSLLM_HAVE_KERNEL_HVX    ?= 0
 EOSLLM_HAVE_KERNEL_NPU    ?= 0
+EOSLLM_HAVE_KERNEL_WASM_SIMD ?= 0
 
 # ---------------------------------------------------------------------
 # Quant schemes

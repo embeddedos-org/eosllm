@@ -6,6 +6,7 @@
 #include "eosllm/os.h"
 
 #include "internal.h"
+#include "../os/os_internal.h"
 #include "../kernels/kernels_internal.h"
 #include "../quant/quant_internal.h"
 #include "../modality/modality_internal.h"
@@ -27,8 +28,21 @@ eos_status_t eos_init_defaults(void) {
     if (r->defaults_initialized) return EOS_OK;
 
     if (!r->os_provided) {
+        /* On Windows, prefer the win32 shim when compiled in; on every
+         * other host fall through to POSIX. Both paths return
+         * EOS_E_UNSUPPORTED when their respective EOSLLM_HAVE_* flag is
+         * 0, in which case we keep trying. */
+#if defined(_WIN32) || defined(_WIN64)
+        s = eosi_os_use_win32();
+        if (s != EOS_OK && s != EOS_E_UNSUPPORTED) return s;
+        if (!r->os_provided) {
+            s = eos_os_use_posix();
+            if (s != EOS_OK && s != EOS_E_UNSUPPORTED) return s;
+        }
+#else
         s = eos_os_use_posix();
         if (s != EOS_OK && s != EOS_E_UNSUPPORTED) return s;
+#endif
     }
 
     s = eosi_backend_register_all();    if (s != EOS_OK) return s;

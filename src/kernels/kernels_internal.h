@@ -14,6 +14,7 @@ eos_status_t eosi_backend_sve_register   (void);
 eos_status_t eosi_backend_rvv_register   (void);
 eos_status_t eosi_backend_hvx_register   (void);
 eos_status_t eosi_backend_npu_register   (void);
+eos_status_t eosi_backend_wasm_register  (void);
 
 eos_status_t eosi_backend_register_all(void);
 
