@@ -1,0 +1,91 @@
+{
+  "name": "eosllm-vscode",
+  "displayName": "eosllm",
+  "description": "Local-first LLM chat in VS Code, powered by the eosllm engine.",
+  "version": "0.1.0",
+  "publisher": "eosllm",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["AI", "Chat", "Other"],
+  "keywords": ["llm", "ai", "chat", "local", "eosllm", "gguf"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/embeddedos-org/eosllm.git",
+    "directory": "vscode-extension"
+  },
+  "homepage": "https://github.com/embeddedos-org/eosllm",
+  "bugs": {
+    "url": "https://github.com/embeddedos-org/eosllm/issues"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCommand:eosllm.runPrompt",
+    "onView:eosllm.chatView"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "eosllm.runPrompt",
+        "title": "eosllm: Run prompt"
+      },
+      {
+        "command": "eosllm.openChat",
+        "title": "eosllm: Open chat panel"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "eosllm",
+          "title": "eosllm",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "eosllm": [
+        {
+          "type": "webview",
+          "id": "eosllm.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "eosllm",
+      "properties": {
+        "eosllm.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a GGUF model file. Required to run prompts."
+        },
+        "eosllm.maxTokens": {
+          "type": "number",
+          "default": 256,
+          "description": "Upper bound on tokens emitted per generation."
+        },
+        "eosllm.binDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory containing eosllm-cli (default: extension global storage; the postinstall script downloads the platform-matching engine binary on first launch)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "postinstall": "node ./scripts/postinstall.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

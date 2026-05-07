@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+<title>eosllm chat</title>
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    margin: 0;
+    padding: 8px;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+  }
+  #log {
+    border: 1px solid var(--vscode-panel-border);
+    padding: 8px;
+    height: calc(100vh - 110px);
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: var(--vscode-editor-font-size, 13px);
+  }
+  .user { color: var(--vscode-charts-blue); margin-top: 8px; }
+  .assistant { color: var(--vscode-foreground); }
+  .meta { color: var(--vscode-descriptionForeground); font-style: italic; margin-top: 4px; }
+  #row { display: flex; gap: 4px; margin-top: 8px; }
+  #prompt {
+    flex: 1;
+    padding: 4px 6px;
+    border: 1px solid var(--vscode-input-border);
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    font: inherit;
+  }
+  button {
+    padding: 4px 12px;
+    border: 1px solid var(--vscode-button-border, transparent);
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    cursor: pointer;
+  }
+  button:hover { background: var(--vscode-button-hoverBackground); }
+</style>
+</head>
+<body>
+  <div id="log"></div>
+  <div id="row">
+    <input id="prompt" type="text" placeholder="Ask anything…" />
+    <button id="send">Send</button>
+  </div>
+
+<script>
+(function () {
+  const vscode = acquireVsCodeApi();
+  const log    = document.getElementById("log");
+  const inp    = document.getElementById("prompt");
+  const btn    = document.getElementById("send");
+
+  // The current assistant span we're appending tokens into. Cleared
+  // when a new prompt is sent.
+  let assistantSpan = null;
+
+  function append(node) {
+    log.appendChild(node);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function send() {
+    const text = inp.value.trim();
+    if (text.length === 0) return;
+    inp.value = "";
+    const u = document.createElement("div");
+    u.className = "user";
+    u.textContent = "› " + text;
+    append(u);
+
+    assistantSpan = document.createElement("span");
+    assistantSpan.className = "assistant";
+    const wrap = document.createElement("div");
+    wrap.appendChild(assistantSpan);
+    append(wrap);
+
+    vscode.postMessage({ kind: "send", prompt: text });
+  }
+
+  btn.addEventListener("click", send);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") send();
+  });
+
+  window.addEventListener("message", (event) => {
+    const msg = event.data || {};
+    if (msg.kind === "token" && assistantSpan !== null) {
+      assistantSpan.appendChild(document.createTextNode(msg.text || ""));
+      log.scrollTop = log.scrollHeight;
+    } else if (msg.kind === "done") {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = "[done: " + msg.reason + ", "
+        + (msg.n_tokens || 0) + " tokens]";
+      append(m);
+      assistantSpan = null;
+    }
+  });
+})();
+</script>
+</body>
+</html>

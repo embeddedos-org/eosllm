@@ -1,0 +1,91 @@
+name: release-vscode-extension
+
+# Triggered on a `vscode-vX.Y.Z` tag (e.g. `git tag vscode-v0.1.0`).
+# Builds the extension, packages a .vsix, and conditionally publishes
+# to the VS Code Marketplace and Open VSX. Each publish step is gated
+# on its respective secret being present, so a fresh repo without
+# tokens still produces a downloadable .vsix on the GitHub Release page.
+
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: build .vsix + publish
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+      - name: Install (skip postinstall — we don't need the engine binary at package time)
+        run: npm install --ignore-scripts
+      - name: Compile TypeScript
+        run: npm run compile
+      - name: Resolve version
+        id: v
+        run: |
+          if [ -n "${GITHUB_REF_NAME:-}" ] && [[ "${GITHUB_REF_NAME}" == vscode-v* ]]; then
+            ver="${GITHUB_REF_NAME#vscode-v}"
+          else
+            ver="$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Package .vsix
+        run: npx @vscode/vsce package --no-dependencies -o "eosllm-vscode-${{ steps.v.outputs.version }}.vsix"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-vscode-vsix
+          path: vscode-extension/*.vsix
+
+      # ----------------------------------------------------------
+      # Publish to VS Code Marketplace (skipped if VSCE_PAT missing)
+      # ----------------------------------------------------------
+      - name: Publish to VS Code Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish --no-dependencies -p "$VSCE_PAT"
+
+      # ----------------------------------------------------------
+      # Publish to Open VSX (skipped if OVSX_PAT missing)
+      # ----------------------------------------------------------
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish "eosllm-vscode-${{ steps.v.outputs.version }}.vsix" -p "$OVSX_PAT"
+
+      # ----------------------------------------------------------
+      # Always attach .vsix to the GitHub Release for sideloading.
+      # ----------------------------------------------------------
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/vscode-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: eosllm-vscode ${{ steps.v.outputs.version }}
+          body: |
+            VS Code extension release.
+            Install from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=eosllm.eosllm-vscode)
+            or [Open VSX](https://open-vsx.org/extension/eosllm/eosllm-vscode), or sideload the attached `.vsix`:
+
+            ```
+            code --install-extension eosllm-vscode-${{ steps.v.outputs.version }}.vsix
+            ```
+          files: |
+            vscode-extension/eosllm-vscode-${{ steps.v.outputs.version }}.vsix
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
