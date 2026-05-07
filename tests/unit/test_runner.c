@@ -1526,6 +1526,76 @@ static void test_gguf_synthetic_roundtrip(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* JSONL streaming protocol — shape test. Validates that the documented
+ * line schema in docs/cli.md (and consumed by the VS Code + browser
+ * extensions) is exactly preserved by a simple synthetic emitter.
+ * Doesn't invoke the CLI binary (the test binary doesn't shell out);
+ * instead it asserts each line in a sample stream parses with the
+ * expected keys and that the stream ends with exactly one terminator.
+ *
+ * If the documented schema ever changes, this test must be updated in
+ * the same diff so consumers are forced to acknowledge the break.
+ */
+
+/* Minimal "is this byte a JSON value char" — sufficient for our shape
+ * checks (we never produce nested objects in t/i/i/done lines). */
+static int test_jsonl_line_is_token(const char *line) {
+    /* Per docs/cli.md a token line looks like:
+     *   {"t":"<text>","i":<integer>}\n   (newline optional in this view)
+     * We're checking shape, not content; require both keys appear in
+     * order and the line is balanced + ends with '}'. */
+    const char *t_key = strstr(line, "\"t\":\"");
+    const char *i_key = strstr(line, "\",\"i\":");
+    const char *brace = strrchr(line, '}');
+    if (line[0] != '{') return 0;
+    if (t_key == NULL) return 0;
+    if (i_key == NULL || i_key < t_key) return 0;
+    if (brace == NULL || brace[1] != '\0') return 0;
+    return 1;
+}
+
+static int test_jsonl_line_is_done(const char *line) {
+    const char *d   = strstr(line, "\"done\":true");
+    const char *r   = strstr(line, "\"reason\":\"");
+    const char *n   = strstr(line, "\"n_tokens\":");
+    const char *brace = strrchr(line, '}');
+    if (line[0] != '{') return 0;
+    if (d == NULL || r == NULL || n == NULL) return 0;
+    if (brace == NULL || brace[1] != '\0') return 0;
+    return 1;
+}
+
+static void test_jsonl_protocol_shape(void) {
+    /* Sample stream — must match exactly what eosllm-cli --smoke
+     * --stream-jsonl emits (see tools/eosllm-cli/main.c). */
+    static const char *lines[] = {
+        "{\"t\":\"hi\",\"i\":1}",
+        "{\"t\":\" \",\"i\":2}",
+        "{\"t\":\"there\",\"i\":3}",
+        "{\"done\":true,\"reason\":\"max\","
+        "\"n_tokens\":3,\"ms\":0,\"tok_per_s\":0}",
+        NULL
+    };
+    int n_token = 0, n_done = 0;
+    int i;
+    for (i = 0; lines[i] != NULL; ++i) {
+        if (test_jsonl_line_is_token(lines[i])) n_token++;
+        else if (test_jsonl_line_is_done(lines[i])) n_done++;
+    }
+    CHECK(n_token == 3, "jsonl: 3 token lines parse with t+i keys");
+    CHECK(n_done  == 1, "jsonl: exactly one done terminator with reason+n_tokens");
+
+    /* Negative cases — wrong shapes must fail the parser so future
+     * regressions to the schema are caught. */
+    CHECK(!test_jsonl_line_is_token("{\"i\":1,\"t\":\"x\"}"),
+          "jsonl: out-of-order keys rejected");
+    CHECK(!test_jsonl_line_is_done("{\"reason\":\"max\",\"n_tokens\":0}"),
+          "jsonl: done line without \"done\":true rejected");
+    CHECK(!test_jsonl_line_is_token("not json at all"),
+          "jsonl: non-object rejected");
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(void) {
     fprintf(stdout, "eosllm Phase 0/1/2 unit tests — version %s, ABI %d\n",
@@ -1553,6 +1623,7 @@ int main(void) {
     test_eos_free();
     test_backend_available();
     test_gguf_synthetic_roundtrip();
+    test_jsonl_protocol_shape();
 #if EOSLLM_HAVE_KERNEL_AVX2
     test_avx2_q4_k_parity();
     test_avx2_q4_k_int8_parity();

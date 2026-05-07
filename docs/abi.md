@@ -187,3 +187,91 @@ required capabilities are not in `eos_caps()` fails with
 - The on-disk model format (`.eosm`) is governed by `docs/file_format.md`,
   not by this document.
 - Performance: tokens-per-second and latency are not ABI guarantees.
+
+## v1.0.0 freeze candidate
+
+Cutting `v1.0.0` will turn the table below into the long-term stability
+contract. Every symbol listed is currently exported and is **intended**
+to be part of the v1.0.0 ABI. Anything not listed is internal and may
+move freely; if a symbol you depend on is missing from this list, file
+an issue before `v1.0.0` is tagged.
+
+### Lifecycle (`include/eosllm/eosllm.h`)
+
+- `eos_init_defaults()`
+- `eos_session_open(model, params, out_session)`
+- `eos_session_feed(session, modality, data, len)`
+- `eos_session_step(session, out_token)`
+- `eos_session_set_deadline(session, ns_from_now)`
+- `eos_session_decode(session, ids, n_ids, out_text, io_len)`
+- `eos_session_close(session)`
+- `eos_free(ptr)`
+
+### Introspection
+
+- `eos_abi_version()` / `eos_version_string()`
+- `eos_status_str(status)`
+- `eos_caps(out)` — including the `runtime_bits` byte and every
+  `EOS_CAPS_RT_*` mask documented in this file.
+- `eos_backend_available(name)`
+- `eos_last_error()`
+- All `eos_model_*` accessors declared in `include/eosllm/model.h`
+  (open / close / num_tensors / tensor / tensor_by_name /
+  meta_str / meta_u64 / meta_f32 / meta_arr_*).
+
+### Module registration vtables
+
+- `eos_os_provide(shim)` and `eos_os_use_posix()`
+- `eos_backend_register(vt)` (shape: `eos_backend_vt_t` in
+  `include/eosllm/backend.h`)
+- `eos_quant_register(vt)`
+- `eos_modality_register(vt)`
+- `eos_tokenizer_register(vt)`
+- `eos_format_register(vt)` (shape: `eos_format_vt_t` in
+  `include/eosllm/model.h`)
+- `eos_sched_register(vt)`
+
+### Constants and types
+
+- The `eos_status_t` enum (codes 0–9; new codes appended at the end).
+- The `eos_modality_kind_t` enum.
+- The `eos_session_params_t` struct (zero-initialized; new fields
+  appended; `_reserved` arrays absorb new bytes for one major cycle).
+- The `eos_caps_t` struct (additive; new bit-fields appended; `_reserved`
+  bytes absorb new bytes for one major cycle).
+- The `EOS_CAPS_RT_*` masks.
+
+### Out-of-band: tooling-level contracts
+
+These are **not** C ABI but ARE pinned by the same v1.0.0 promise.
+Breaking changes to either bump the corresponding tool's version and
+land a `[Changed]` note in `CHANGELOG.md`:
+
+- `eosllm-cli --stream-jsonl` line schema, documented in
+  [docs/cli.md](cli.md).
+- `eosllm-server` HTTP/SSE wire protocol, documented in
+  [docs/server.md](server.md).
+
+### Out of v1.0.0 scope
+
+- Internal helpers under `eosi_*`. These remain unstable across any
+  release.
+- `eosllm-bench` JSON output schema (documented as advisory only).
+- `.eosm` writer output bit-exact stability between minor versions
+  (only the readability contract survives).
+- The on-disk feature-bit assignments in `eos_caps_t` are stable, but
+  the **values** of `EOSLLM_HAVE_*` macros are build-time only —
+  hosts must read `eos_caps()` at runtime, not test the macros.
+
+### Cutting v1.0.0
+
+When the maintainer is ready:
+
+1. Audit every symbol listed above for any unintended re-export of
+   internal types or untyped pointers.
+2. Bump `EOSLLM_VERSION_MAJOR = 1` and `EOSLLM_ABI_VERSION` to a
+   round-number reset (`100`).
+3. Tag `v1.0.0`. The release pipeline (see [docs/release.md](release.md))
+   produces signed binaries for all 5 platforms.
+4. Add a `## [1.0.0]` section to `CHANGELOG.md` and move the
+   `[Unreleased]` entries under it.

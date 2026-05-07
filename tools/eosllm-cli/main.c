@@ -26,8 +26,10 @@
 static void usage(void) {
     fprintf(stderr,
         "Usage: eosllm-cli --model <path.gguf> --prompt \"<text>\" [--n N]\n"
-        "                  [--scheduler greedy] [--ctx N]\n"
+        "                  [--max-tokens N] [--scheduler greedy] [--ctx N]\n"
+        "                  [--stream-jsonl]\n"
         "       eosllm-cli --smoke\n"
+        "       eosllm-cli --smoke --stream-jsonl\n"
         "       eosllm-cli --smoke-bad-magic\n"
         "       eosllm-cli --smoke-empty-stream\n"
         "       eosllm-cli --last-error\n"
@@ -41,6 +43,13 @@ static void usage(void) {
         "--last-error triggers a known-failing call and prints both\n"
         "eos_status_str() and eos_last_error() (sanity check for\n"
         "distro packagers that the TLS path linked correctly).\n"
+        "\n"
+        "--stream-jsonl emits one JSON object per line on stdout:\n"
+        "  {\"t\":\"<text>\",\"i\":<token_id>}                  per token\n"
+        "  {\"done\":true,\"reason\":\"eos|max|user|error\",\n"
+        "   \"n_tokens\":N,\"ms\":M,\"tok_per_s\":T}            terminator\n"
+        "Documented as a stable contract in docs/cli.md; the VS Code\n"
+        "and browser extensions parse this format.\n"
         "\n"
         "Run `make help` from the repo root for the full list of\n"
         "build / test / sanitize / smoke / benchmark / fuzz targets.\n");
@@ -244,6 +253,7 @@ int main(int argc, char **argv) {
     int         show_last_error = 0;
     int         show_caps   = 0;
     int         show_version = 0;
+    int         stream_jsonl = 0;
     const char *meta_path   = NULL;
     int         i;
     eos_status_t s;
@@ -255,8 +265,10 @@ int main(int argc, char **argv) {
         if      (!strcmp(argv[i], "--model")     && i + 1 < argc) model_path = argv[++i];
         else if (!strcmp(argv[i], "--prompt")    && i + 1 < argc) prompt     = argv[++i];
         else if (!strcmp(argv[i], "--n")         && i + 1 < argc) n_predict  = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--max-tokens") && i + 1 < argc) n_predict = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--ctx")       && i + 1 < argc) max_ctx    = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scheduler") && i + 1 < argc) sched      = argv[++i];
+        else if (!strcmp(argv[i], "--stream-jsonl"))               stream_jsonl = 1;
         else if (!strcmp(argv[i], "--smoke"))                     smoke      = 1;
         else if (!strcmp(argv[i], "--smoke-bad-magic"))           smoke_bad_magic = 1;
         else if (!strcmp(argv[i], "--smoke-empty-stream"))        smoke_empty_stream = 1;
@@ -270,7 +282,21 @@ int main(int argc, char **argv) {
         else { usage(); return 2; }
     }
 
-    if (smoke) return run_smoke();
+    if (smoke) {
+        /* --smoke + --stream-jsonl: emit synthetic JSONL token lines so
+         * the documented schema can be tested without a real model.
+         * Three fake tokens then a done line. The output shape is the
+         * stable contract documented in docs/cli.md. */
+        if (stream_jsonl) {
+            fprintf(stdout, "{\"t\":\"hi\",\"i\":1}\n");
+            fprintf(stdout, "{\"t\":\" \",\"i\":2}\n");
+            fprintf(stdout, "{\"t\":\"there\",\"i\":3}\n");
+            fprintf(stdout, "{\"done\":true,\"reason\":\"max\","
+                            "\"n_tokens\":3,\"ms\":0,\"tok_per_s\":0}\n");
+            return 0;
+        }
+        return run_smoke();
+    }
 
     if (show_version) {
         /* Single line, machine-parseable. Common packager request. */
@@ -476,29 +502,69 @@ int main(int argc, char **argv) {
 
     s = eos_session_feed(ss, EOS_MODALITY_TEXT, prompt, strlen(prompt));
     if (s != EOS_OK) {
-        fprintf(stderr, "feed: %s\n", eos_status_str(s));
+        if (stream_jsonl) {
+            fprintf(stdout, "{\"done\":true,\"reason\":\"error\","
+                            "\"detail\":\"feed: %s\"}\n", eos_status_str(s));
+        } else {
+            fprintf(stderr, "feed: %s\n", eos_status_str(s));
+        }
         eos_session_close(ss); eos_model_close(m); return 1;
     }
 
-    fputs(prompt, stdout);
-    fflush(stdout);
+    if (!stream_jsonl) {
+        fputs(prompt, stdout);
+        fflush(stdout);
+    }
 
-    for (i = 0; i < n_predict; ++i) {
-        uint32_t tok;
-        char     buf[64];
-        size_t   len = sizeof(buf);
-        s = eos_session_step(ss, &tok);
-        if (s != EOS_OK) {
-            fprintf(stderr, "\nstep: %s\n", eos_status_str(s));
-            break;
+    {
+        int n_emitted = 0;
+        const char *reason = "max";
+        for (i = 0; i < n_predict; ++i) {
+            uint32_t tok;
+            char     buf[64];
+            size_t   len = sizeof(buf);
+            s = eos_session_step(ss, &tok);
+            if (s != EOS_OK) {
+                reason = (s == EOS_E_DEADLINE) ? "user" : "error";
+                if (!stream_jsonl) fprintf(stderr, "\nstep: %s\n", eos_status_str(s));
+                break;
+            }
+            s = eos_session_decode(ss, &tok, 1, buf, &len);
+            if (s == EOS_OK && len <= sizeof(buf)) {
+                if (stream_jsonl) {
+                    /* Emit one line per token: minimal JSON-encoded text
+                     * + token id. Escapes ", \, control bytes. */
+                    char enc[256];
+                    size_t w = 0, k;
+                    for (k = 0; k < len && w < sizeof(enc) - 6; ++k) {
+                        unsigned char c = (unsigned char)buf[k];
+                        if (c == '"' || c == '\\') { enc[w++] = '\\'; enc[w++] = (char)c; }
+                        else if (c == '\n') { enc[w++] = '\\'; enc[w++] = 'n'; }
+                        else if (c == '\r') { enc[w++] = '\\'; enc[w++] = 'r'; }
+                        else if (c == '\t') { enc[w++] = '\\'; enc[w++] = 't'; }
+                        else if (c < 0x20)  { /* drop other control bytes */ }
+                        else                { enc[w++] = (char)c; }
+                    }
+                    enc[w] = '\0';
+                    fprintf(stdout, "{\"t\":\"%s\",\"i\":%u}\n",
+                            enc, (unsigned)tok);
+                    fflush(stdout);
+                } else {
+                    fwrite(buf, 1, len, stdout);
+                    fflush(stdout);
+                }
+                n_emitted++;
+            }
         }
-        s = eos_session_decode(ss, &tok, 1, buf, &len);
-        if (s == EOS_OK && len <= sizeof(buf)) {
-            fwrite(buf, 1, len, stdout);
+        if (stream_jsonl) {
+            fprintf(stdout, "{\"done\":true,\"reason\":\"%s\","
+                            "\"n_tokens\":%d,\"ms\":0,\"tok_per_s\":0}\n",
+                    reason, n_emitted);
             fflush(stdout);
+        } else {
+            fputc('\n', stdout);
         }
     }
-    fputc('\n', stdout);
 
     eos_session_close(ss);
     eos_model_close(m);
