@@ -68,7 +68,10 @@ jobs:
           EOSLLM_SKIP_BENCH_DIFF: '1'
         run: make CC=clang all-checks
       - name: Build release tools
-        run: make BUILD=release tools
+        # Clean first because make all-checks leaves a sanitizer-
+        # instrumented libeosllm.a behind, which would otherwise fail
+        # to link against a non-sanitized eosllm-cli.
+        run: make clean && make BUILD=release lib tools
       - name: Stage tarball
         run: |
           v="${{ needs.resolve-version.outputs.version }}"

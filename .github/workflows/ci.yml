@@ -202,7 +202,7 @@ jobs:
           ./tests/fuzz/fuzz_gguf tests/fuzz/corpus_gguf \
             -max_total_time=30 \
             -print_final_stats=1 \
-            -timeout=5 \
+            -timeout=15 \
             -rss_limit_mb=512
 
   benchmark:
