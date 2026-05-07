@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "eosllm",
+  "description": "Local-first LLM chat in your browser, powered by the eosllm engine running on localhost.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": ["http://localhost:7777/*", "http://127.0.0.1:7777/*"],
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "eosllm chat",
+    "default_popup": "src/popup.html"
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "icons": {},
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "eosllm@embeddedos-org.github.io",
+      "strict_min_version": "115.0"
+    }
+  }
+}

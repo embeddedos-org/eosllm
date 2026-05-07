@@ -9,6 +9,64 @@ release may break the ABI; see `docs/abi.md` for the stability promise.
 
 ### Added
 
+- **Multi-platform release pipeline** (Phase A, `.github/workflows/release.yml`)
+  Replaces the single linux-x86_64 job with parallel matrix builds for
+  **linux x86_64**, **linux aarch64** (cross + qemu), **macOS
+  universal** (arm64 + x86_64 lipo), and **windows x86_64** (MinGW-w64).
+  Each platform's signing/notarization is conditional on the
+  corresponding GitHub repo secret (`APPLE_*`, `WINDOWS_CERT_*`,
+  `MINISIGN_*`); missing secrets cause the workflow to ship the binary
+  unsigned with a clear note in the release body. Adds `src/os/win32.c`
+  Win32 OS shim, `src/os/wasm.c` + `src/kernels/wasm/wasm.c` Phase F
+  stubs, `build/toolchains/win32-x86_64.mk`, helper scripts under
+  `tools/release/` (`build_macos_universal.sh`,
+  `sign_and_notarize_macos.sh`, `sign_windows.ps1`), `docs/release.md`
+  operator manual, and a Release-signing-keys section in `SECURITY.md`.
+  CI also now runs the host-build matrix on `windows-latest` so
+  Windows portability bugs surface on every PR.
+- **`eosllm-cli --stream-jsonl`** (Phase B, `tools/eosllm-cli/main.c`)
+  Emits one JSON-Lines record per token to stdout
+  (`{"t":"<text>","i":<id>}`) followed by exactly one terminator
+  (`{"done":true,"reason":"...","n_tokens":N,"ms":M,"tok_per_s":T}`).
+  Stable wire-protocol contract documented in `docs/cli.md`. The
+  VS Code extension and browser extension consume this format.
+  `--max-tokens` accepted as an alias for `--n`. `--smoke
+  --stream-jsonl` emits a 3-token synthetic stream useful as a
+  protocol smoke for client implementers.
+  New unit test `test_jsonl_protocol_shape` validates the schema
+  (5 checks) so future schema changes break the suite.
+- **VS Code extension** (Phase C, `vscode-extension/`)
+  TypeScript extension that wraps `eosllm-cli --stream-jsonl` and
+  streams tokens into a chat webview. First-launch postinstall
+  fetches the platform-matching engine binary from the engine's
+  GitHub Releases page. Tag-driven publisher workflow at
+  `.github/workflows/release-vscode-extension.yml` (triggers on
+  `vscode-vX.Y.Z`); conditionally publishes to the VS Code
+  Marketplace + Open VSX (each gated on `VSCE_PAT` / `OVSX_PAT`).
+- **`eosllm-server` HTTP/SSE daemon** (Phase D, `tools/eosllm-server/`)
+  Pure C99 single-binary daemon, zero deps. Routes:
+  `GET /healthz`, `GET /caps` (mirrors `eosllm-cli --caps`),
+  `POST /generate` (request → SSE token stream). Loopback-bind by
+  default; CORS default-deny with `--allow-origin` allow-list.
+  Cross-platform (POSIX + winsock2 wrappers). Wire protocol
+  documented as a stable contract in `docs/server.md`. Wired into
+  `make tools` and `make server` targets; new `make server-smoke`
+  health gate; CI cell `server-smoke` runs it on every PR.
+- **Browser extension** (Phase E, `browser-extension/`)
+  Chrome MV3 + Firefox WebExtension single codebase (vite +
+  `@crxjs/vite-plugin`). Talks to `tools/eosllm-server` on
+  `localhost:7777`. Tag-driven publisher workflow at
+  `.github/workflows/release-browser-extension.yml` (triggers on
+  `browser-vX.Y.Z`); conditionally publishes to Chrome Web Store
+  (`chrome-webstore-upload-cli`) and Mozilla AMO (`web-ext sign`).
+- **`v1.0.0` ABI freeze candidate** (Phase B, `docs/abi.md`)
+  New section enumerates every public symbol intended to be part
+  of the v1.0.0 ABI plus the `eosllm-cli --stream-jsonl` and
+  `eosllm-server` HTTP/SSE wire protocols as out-of-band tooling
+  contracts pinned by the same promise.
+
+### Added (existing entries)
+
 - **AVX2 `matmul_q4_k_int8` fused-int8 path**
   (`src/kernels/avx2/matmul_q4_k_int8.c`): a second AVX2 implementation
   of `matmul_q4_k` that keeps the 4-bit weights packed-then-u8 through

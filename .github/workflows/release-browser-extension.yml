@@ -1,0 +1,118 @@
+name: release-browser-extension
+
+# Triggered on a `browser-vX.Y.Z` tag (e.g. `git tag browser-v0.1.0`).
+# Builds Chrome zip + Firefox xpi, conditionally publishes to Chrome
+# Web Store and Mozilla AMO. Each store push is gated on its
+# respective secret being present; the artifacts are always uploaded
+# to the GitHub Release for sideloading.
+
+on:
+  push:
+    tags:
+      - 'browser-v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: build + publish
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: browser-extension/package-lock.json
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Build (vite)
+        run: npm run build
+      - name: Resolve version
+        id: v
+        run: |
+          if [ -n "${GITHUB_REF_NAME:-}" ] && [[ "${GITHUB_REF_NAME}" == browser-v* ]]; then
+            ver="${GITHUB_REF_NAME#browser-v}"
+          else
+            ver="$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      # ----------------------------------------------------------
+      # Package zip (Chrome / Edge / Brave) + xpi (Firefox)
+      # ----------------------------------------------------------
+      - name: Package Chrome zip
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          ( cd dist && zip -r "../eosllm-chrome-${v}.zip" . )
+      - name: Package Firefox xpi (web-ext build)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          npx web-ext build --source-dir=dist --artifacts-dir=. \
+            --filename="eosllm-firefox-${VERSION}.xpi" --overwrite-dest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-browser-artifacts
+          path: |
+            browser-extension/eosllm-chrome-*.zip
+            browser-extension/eosllm-firefox-*.xpi
+
+      # ----------------------------------------------------------
+      # Chrome Web Store publish (skipped if any CHROME_* secret missing)
+      # ----------------------------------------------------------
+      - name: Publish to Chrome Web Store
+        if: ${{ env.CHROME_CLIENT_ID != '' && env.CHROME_REFRESH_TOKEN != '' }}
+        env:
+          CHROME_CLIENT_ID:     ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CHROME_EXTENSION_ID:  ${{ secrets.CHROME_EXTENSION_ID }}
+        run: |
+          npx -y chrome-webstore-upload-cli@2 upload \
+            --source "eosllm-chrome-${{ steps.v.outputs.version }}.zip" \
+            --extension-id "$CHROME_EXTENSION_ID" \
+            --client-id    "$CHROME_CLIENT_ID" \
+            --client-secret "$CHROME_CLIENT_SECRET" \
+            --refresh-token "$CHROME_REFRESH_TOKEN" \
+            --auto-publish
+
+      # ----------------------------------------------------------
+      # Firefox AMO publish (skipped if FIREFOX_JWT_* missing)
+      # ----------------------------------------------------------
+      - name: Publish to Mozilla AMO (signed listed)
+        if: ${{ env.FIREFOX_JWT_ISSUER != '' && env.FIREFOX_JWT_SECRET != '' }}
+        env:
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+        run: |
+          npx web-ext sign --source-dir=dist --artifacts-dir=. --channel=listed \
+            --api-key   "$FIREFOX_JWT_ISSUER" \
+            --api-secret "$FIREFOX_JWT_SECRET"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/browser-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: eosllm-browser ${{ steps.v.outputs.version }}
+          body: |
+            Browser extension release. Available on the
+            [Chrome Web Store](https://chromewebstore.google.com/detail/eosllm/PLACEHOLDER)
+            and [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/eosllm/),
+            or sideload one of the attached packages:
+
+            - Chrome / Edge / Brave: `eosllm-chrome-${{ steps.v.outputs.version }}.zip`
+            - Firefox:               `eosllm-firefox-${{ steps.v.outputs.version }}.xpi`
+
+            Requires `eosllm-server` to be running locally (see [docs/server.md](https://github.com/embeddedos-org/eosllm/blob/main/docs/server.md)).
+          files: |
+            browser-extension/eosllm-chrome-${{ steps.v.outputs.version }}.zip
+            browser-extension/eosllm-firefox-${{ steps.v.outputs.version }}.xpi
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>eosllm — settings</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 520px; margin: 24px auto;
+         padding: 0 16px; }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  input { width: 100%; padding: 6px 8px; box-sizing: border-box; }
+  .help { color: #666; font-size: 12px; margin-top: 2px; }
+  button { margin-top: 16px; padding: 6px 14px; cursor: pointer; }
+  #status { margin-left: 12px; color: #060; }
+</style>
+</head>
+<body>
+  <h1>eosllm</h1>
+  <p>Talks to a local <code>eosllm-server</code>. Start the daemon with
+     <code>./eosllm-server</code> from the engine release tarball.</p>
+
+  <label for="serverUrl">Server URL</label>
+  <input id="serverUrl" type="url" placeholder="http://127.0.0.1:7777" />
+  <div class="help">Default: <code>http://127.0.0.1:7777</code>. Loopback only by default.</div>
+
+  <label for="modelPath">Model path (on the server)</label>
+  <input id="modelPath" type="text" placeholder="/path/to/model.gguf" />
+  <div class="help">Empty ⇒ server runs synthetic-smoke flow (useful for protocol testing).</div>
+
+  <label for="maxTokens">Max tokens</label>
+  <input id="maxTokens" type="number" min="1" max="8192" value="256" />
+
+  <button id="save">Save</button>
+  <span id="status" hidden>Saved.</span>
+
+<script type="module">
+const fields = {
+    serverUrl: document.getElementById("serverUrl"),
+    modelPath: document.getElementById("modelPath"),
+    maxTokens: document.getElementById("maxTokens"),
+};
+
+const DEFAULTS = {
+    serverUrl: "http://127.0.0.1:7777",
+    modelPath: "",
+    maxTokens: 256,
+};
+
+(async function load() {
+    const v = await chrome.storage.local.get(DEFAULTS);
+    fields.serverUrl.value = v.serverUrl ?? DEFAULTS.serverUrl;
+    fields.modelPath.value = v.modelPath ?? DEFAULTS.modelPath;
+    fields.maxTokens.value = v.maxTokens ?? DEFAULTS.maxTokens;
+})();
+
+document.getElementById("save").addEventListener("click", async () => {
+    await chrome.storage.local.set({
+        serverUrl: fields.serverUrl.value.trim() || DEFAULTS.serverUrl,
+        modelPath: fields.modelPath.value.trim(),
+        maxTokens: Number(fields.maxTokens.value) || DEFAULTS.maxTokens,
+    });
+    const s = document.getElementById("status");
+    s.hidden = false;
+    setTimeout(() => { s.hidden = true; }, 1500);
+});
+</script>
+</body>
+</html>
