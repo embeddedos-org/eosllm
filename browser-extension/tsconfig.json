@@ -11,5 +11,6 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "vite.config.ts", "manifest.json"]
+  "include": ["src/**/*", "vite.config.ts", "manifest.json"],
+  "exclude": ["node_modules", "dist"]
 }
