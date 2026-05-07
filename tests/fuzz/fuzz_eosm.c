@@ -27,6 +27,7 @@
 #include "eosllm/model.h"
 
 #include "core/internal.h"
+#include "core/model_internal.h"  /* concrete eos_tensor layout for the data-touch */
 
 typedef struct {
     const uint8_t *data;

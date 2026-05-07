@@ -64,6 +64,8 @@ jobs:
       - name: Install clang (for sanitize chain)
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: make all-checks
+        env:
+          EOSLLM_SKIP_BENCH_DIFF: '1'
         run: make CC=clang all-checks
       - name: Build release tools
         run: make BUILD=release tools

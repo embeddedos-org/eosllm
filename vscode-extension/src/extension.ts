@@ -14,7 +14,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
 
 // ---------------------------------------------------------------------
@@ -41,7 +41,7 @@ interface DoneLine {
  * Stable contract: see docs/cli.md in the engine repo.
  */
 class EosllmSession extends EventEmitter {
-    private proc: ChildProcessWithoutNullStreams | null = null;
+    private proc: ChildProcess | null = null;
     private buf = "";
 
     constructor(
@@ -63,6 +63,17 @@ class EosllmSession extends EventEmitter {
             stdio: ["ignore", "pipe", "pipe"],
         });
 
+        // stdio above guarantees stdout + stderr are piped, but
+        // ChildProcess's static type doesn't narrow that. Guard
+        // explicitly so strict-mode tsc is happy.
+        if (this.proc.stdout === null || this.proc.stderr === null) {
+            this.emit("done", {
+                done: true, reason: "error", n_tokens: 0, ms: 0,
+                tok_per_s: 0,
+                detail: "spawn returned no stdout/stderr",
+            } as DoneLine);
+            return;
+        }
         this.proc.stdout.setEncoding("utf8");
         this.proc.stdout.on("data", (chunk: string) => this.onChunk(chunk));
         this.proc.stderr.on("data", (chunk: Buffer) => {
@@ -81,7 +92,7 @@ class EosllmSession extends EventEmitter {
                 } as DoneLine);
             }
         });
-        this.proc.on("error", (err) => {
+        this.proc.on("error", (err: Error) => {
             this.emit("done", {
                 done: true,
                 reason: "error",

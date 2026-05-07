@@ -67,7 +67,14 @@ static void test_version_and_caps(void) {
     CHECK(v == EOSLLM_ABI_VERSION,           "abi_version matches header");
     CHECK(vs != NULL && vs[0] != '\0',       "version_string non-empty");
     CHECK_OK(eos_caps(&caps),                "eos_caps returns OK");
+#if EOSLLM_HAVE_POSIX
     CHECK(caps.have_posix    == 1,           "posix is compiled in");
+#else
+    /* Windows / WASM / Zephyr / FreeRTOS / baremetal builds: POSIX
+     * shim is intentionally absent. The win32/etc. equivalents take
+     * over via init_defaults. */
+    CHECK(caps.have_posix    == 0,           "posix is NOT compiled in (alt OS shim active)");
+#endif
     CHECK(caps.have_k_scalar == 1,           "scalar kernels are compiled in");
     CHECK(caps.have_threads  == 0,           "threads default to OFF");
     CHECK(caps.have_q_q8_0   == 1,           "q8_0 quant is compiled in");

@@ -466,8 +466,10 @@ all-checks:
 	echo "==== make sanitize ===="        ; $(MAKE) sanitize; \
 	echo "==== make sanitize-cli ===="    ; $(MAKE) sanitize-cli; \
 	echo "==== make sanitize-bench ===="  ; $(MAKE) sanitize-bench; \
-	if [ -f "docs/benchmarks/baseline-$(HOST_ARCH).json" ]; then \
+	if [ -f "docs/benchmarks/baseline-$(HOST_ARCH).json" ] && [ "$$EOSLLM_SKIP_BENCH_DIFF" != "1" ]; then \
 	  echo "==== make bench-diff ===="    ; $(MAKE) bench-diff; \
+	elif [ "$$EOSLLM_SKIP_BENCH_DIFF" = "1" ]; then \
+	  echo "==== make bench-diff ==== (skipped: EOSLLM_SKIP_BENCH_DIFF=1; perf-gating against shared CI runners is too noisy)"; \
 	else \
 	  echo "==== make bench-diff ==== (skipped: no baseline-$(HOST_ARCH).json)"; \
 	fi; \
