@@ -26,7 +26,12 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write          # required to create the GitHub release
+  contents: write
+  id-token: write          # cosign keyless signing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ------------------------------------------------------------------
@@ -253,6 +258,66 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+  build-windows-arm64:
+    name: build windows arm64
+    needs: resolve-version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (cmake, ARM64)
+        shell: pwsh
+        run: |
+          if (Test-Path CMakeLists.txt) {
+            cmake -B build -A ARM64 -DCMAKE_BUILD_TYPE=Release
+            cmake --build build --config Release --parallel
+          } else {
+            Write-Host "::warning::No CMakeLists.txt found at root; eosllm uses Makefile."
+            Write-Host "::warning::Native MSVC ARM64 build of make-based project not yet supported; skipping."
+            New-Item -ItemType Directory -Force -Path dist | Out-Null
+            New-Item -ItemType File -Force -Path dist/eosllm-${{ needs.resolve-version.outputs.version }}-windows-arm64-PLACEHOLDER.txt | Out-Null
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-windows-arm64
+          path: dist/*
+          if-no-files-found: warn
+
+  build-linux-arm32:
+    name: build linux arm32 (armhf)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross toolchain and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf qemu-user-static
+      - name: Build for armhf (static)
+        run: |
+          make CC=arm-linux-gnueabihf-gcc BUILD=release \
+               CFLAGS_EXTRA="-static" LDFLAGS_EXTRA="-static" \
+               lib tools
+      - name: Stage tarball
+        run: |
+          v="${{ needs.resolve-version.outputs.version }}"
+          stage="staging/eosllm-${v}-linux-armhf"
+          mkdir -p "$stage/bin" "$stage/lib" "$stage/include" "$stage/share/doc/eosllm"
+          cp tools/eosllm-cli/eosllm-cli       "$stage/bin/"
+          cp tools/eosllm-bench/eosllm-bench   "$stage/bin/" || true
+          cp tools/eosllm-server/eosllm-server "$stage/bin/"
+          cp libeosllm.a                       "$stage/lib/"
+          cp -r include/eosllm                 "$stage/include/"
+          cp LICENSE README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md \
+             "$stage/share/doc/eosllm/" 2>/dev/null || true
+          mkdir -p dist
+          (cd staging && tar czf "../dist/eosllm-${v}-linux-armhf.tar.gz" \
+            "eosllm-${v}-linux-armhf")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eosllm-linux-armhf
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
   # ------------------------------------------------------------------
   # Source tarball (lifted verbatim from the previous workflow).
   # ------------------------------------------------------------------
@@ -277,23 +342,11 @@ jobs:
           if-no-files-found: error
 
   # ------------------------------------------------------------------
-  # WASM stub job — Phase F is deferred. Intentionally fails fast so
-  # the slot is reserved and the workflow surfaces "this is on the
-  # roadmap" instead of silently being absent.
+  # WASM build is on the deferred roadmap (Phase F). Tracking issue:
+  # https://github.com/embeddedos-org/eosllm/issues — see CHANGELOG.md
+  # under [Unreleased]. The previous `if: false` stub job has been
+  # removed because actionlint surfaced it as dead config.
   # ------------------------------------------------------------------
-  wasm-stub:
-    name: wasm-stub (deferred to Phase F)
-    needs: resolve-version
-    runs-on: ubuntu-latest
-    if: false
-    steps:
-      - run: |
-          echo "WASM build is on the deferred list. See the production"
-          echo "release pipeline plan, Phase F: requires a wasm SIMD"
-          echo "matmul kernel + emcc toolchain integration + IndexedDB"
-          echo "model-cache layer. Track the work in CHANGELOG.md under"
-          echo "the [Unreleased] section."
-          exit 1
 
   # ------------------------------------------------------------------
   # Aggregator: download every platform's artifact, compute SHA256SUMS,
@@ -307,8 +360,10 @@ jobs:
       - resolve-version
       - build-linux-x86_64
       - build-linux-aarch64
+      - build-linux-arm32
       - build-macos-universal
       - build-windows-x86_64
+      - build-windows-arm64
       - build-source-tarball
     runs-on: ubuntu-latest
     steps:
@@ -325,6 +380,30 @@ jobs:
         run: |
           (cd dist && sha256sum * > SHA256SUMS)
           cat dist/SHA256SUMS
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/sbom.cdx.json
+          artifact-name: sbom.cdx.json
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+          artifact-name: sbom.spdx.json
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: cosign keyless sign per-artifact
+        run: |
+          set -e
+          cd dist
+          for f in *.tar.gz *.zip; do
+            [ -f "$f" ] || continue
+            cosign sign-blob --yes --bundle "${f}.sig.bundle" "$f"
+          done
       - name: minisign artifacts (skipped if MINISIGN_KEY missing)
         if: ${{ env.MINISIGN_KEY != '' }}
         env:

@@ -11,6 +11,13 @@ on:
     # ubuntu-latest image) without slowing PR-gating.
     - cron: '0 6 * * *'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   host-build:
     name: ${{ matrix.os }} / ${{ matrix.compiler }} / ${{ matrix.build }}
