@@ -48,3 +48,10 @@ __pycache__/
 docs/benchmarks/host.json
 docs/benchmarks/*.json
 !docs/benchmarks/baseline-*.json
+build/
+build-*/
+dist/
+node_modules/
+.venv/
+target/
+.pytest_cache/

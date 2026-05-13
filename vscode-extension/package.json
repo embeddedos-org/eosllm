@@ -2,14 +2,25 @@
   "name": "eosllm-vscode",
   "displayName": "eosllm",
   "description": "Local-first LLM chat in VS Code, powered by the eosllm engine.",
-  "version": "0.1.0",
+  "version": "3.0.0",
   "publisher": "eosllm",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["AI", "Chat", "Other"],
-  "keywords": ["llm", "ai", "chat", "local", "eosllm", "gguf"],
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "keywords": [
+    "llm",
+    "ai",
+    "chat",
+    "local",
+    "eosllm",
+    "gguf"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/embeddedos-org/eosllm.git",

@@ -1,6 +1,6 @@
 [project]
 name = "eosllm-convert"
-version = "0.1.0"
+version = "3.0.0"
 description = "Convert HuggingFace / GGUF / safetensors models into eosllm's native .eosm format."
 readme = "README.md"
 requires-python = ">=3.10"
