@@ -1,6 +1,6 @@
 {
   "name": "eosllm-browser-extension",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Browser extension that talks to a local eosllm-server.",
   "license": "MIT",
   "private": true,

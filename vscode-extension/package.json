@@ -2,7 +2,7 @@
   "name": "eosllm-vscode",
   "displayName": "eosllm",
   "description": "Local-first LLM chat in VS Code, powered by the eosllm engine.",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "publisher": "eosllm",
   "license": "MIT",
   "engines": {
