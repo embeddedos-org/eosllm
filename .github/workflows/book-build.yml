@@ -122,7 +122,7 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
       - name: Attach to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./pdf-output/${{ needs.build-pdf.outputs.pdf_name }}
           tag_name: ${{ steps.tag.outputs.tag }}

@@ -100,7 +100,7 @@ jobs:
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/browser-v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: eosllm-browser ${{ steps.v.outputs.version }}
           body: |
