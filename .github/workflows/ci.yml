@@ -44,7 +44,7 @@ jobs:
         # as on POSIX runners. Other OSes use the default bash.
         shell: ${{ matrix.os == 'windows-latest' && 'msys2 {0}' || 'bash' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up MSYS2 (windows only)
         if: matrix.os == 'windows-latest'
@@ -103,7 +103,7 @@ jobs:
     name: ubuntu / aarch64 / qemu
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install cross toolchain and qemu
         run: |
@@ -128,7 +128,7 @@ jobs:
     name: ubuntu / clang / asan + ubsan + leaksan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang
         run: |
@@ -148,7 +148,7 @@ jobs:
     name: ubuntu / determinism (3-iteration bit-identical)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build
         run: make BUILD=release lib
@@ -160,7 +160,7 @@ jobs:
     name: ubuntu / clang / libfuzzer + asan (eosm reader, 30s)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang
         run: |
@@ -188,7 +188,7 @@ jobs:
     name: ubuntu / clang / libfuzzer + asan (gguf reader, 30s)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang
         run: |
@@ -216,7 +216,7 @@ jobs:
     name: ubuntu / matmul microbenchmark (perf snapshot)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build + run benchmark
         run: make benchmark
@@ -235,7 +235,7 @@ jobs:
     name: ubuntu / static checks (error uniqueness + include firewall)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: make check-errors
         run: make check-errors
       - name: make check-includes
@@ -246,7 +246,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install clang (for sanitize chain)
         run: |
           sudo apt-get update
@@ -260,7 +260,7 @@ jobs:
     name: ubuntu / cli lifecycle smoke (synthetic GGUF)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang (for sanitize-cli)
         run: |
@@ -294,7 +294,7 @@ jobs:
     name: ubuntu / eosllm-server lifecycle smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build server
         run: make BUILD=release server
       - name: make server-smoke
