@@ -23,7 +23,7 @@ We continuously benchmark eosllm — On-Device LLM against the entire EmbeddedOS
 
 ---
 
-## 🎬 Product Marketing Video
+## 🎬 Product Marketing Video (App Store Proof of Production)
 
 Experience eosllm — On-Device LLM in action! Watch our high-fidelity product demonstration and marketing video:
 
