@@ -48,7 +48,7 @@ jobs:
       - name: Package .vsix
         run: npx @vscode/vsce package --no-dependencies -o "eosllm-vscode-${{ steps.v.outputs.version }}.vsix"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-vscode-vsix
           path: vscode-extension/*.vsix

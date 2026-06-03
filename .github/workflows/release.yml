@@ -93,7 +93,7 @@ jobs:
           mkdir -p dist
           (cd staging && tar czf "../dist/eosllm-${v}-linux-x86_64.tar.gz" \
             "eosllm-${v}-linux-x86_64")
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-linux-x86_64
           path: dist/*.tar.gz
@@ -141,7 +141,7 @@ jobs:
           mkdir -p dist
           (cd staging && tar czf "../dist/eosllm-${v}-linux-aarch64.tar.gz" \
             "eosllm-${v}-linux-aarch64")
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-linux-aarch64
           path: dist/*.tar.gz
@@ -183,7 +183,7 @@ jobs:
           mkdir -p dist
           (cd staging && tar czf "../dist/eosllm-${v}-macos-universal.tar.gz" \
             "eosllm-${v}-macos-universal")
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-macos-universal
           path: dist/*.tar.gz
@@ -252,7 +252,7 @@ jobs:
         run: |
           $v = "${{ needs.resolve-version.outputs.version }}"
           Compress-Archive -Path "staging/eosllm-${v}-windows-x86_64" -DestinationPath "dist/eosllm-${v}-windows-x86_64.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-windows-x86_64
           path: dist/*.zip
@@ -276,7 +276,7 @@ jobs:
             New-Item -ItemType Directory -Force -Path dist | Out-Null
             New-Item -ItemType File -Force -Path dist/eosllm-${{ needs.resolve-version.outputs.version }}-windows-arm64-PLACEHOLDER.txt | Out-Null
           }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-windows-arm64
           path: dist/*
@@ -312,7 +312,7 @@ jobs:
           mkdir -p dist
           (cd staging && tar czf "../dist/eosllm-${v}-linux-armhf.tar.gz" \
             "eosllm-${v}-linux-armhf")
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-linux-armhf
           path: dist/*.tar.gz
@@ -335,7 +335,7 @@ jobs:
           mkdir -p dist
           git archive --format=tar.gz --prefix="eosllm-${v}/" \
             -o "dist/eosllm-${v}-src.tar.gz" HEAD
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-src
           path: dist/*.tar.gz

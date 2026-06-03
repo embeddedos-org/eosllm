@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload final video
         if: steps.detect.outputs.has_promo == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eosllm-promo-video
           path: promo/${{ steps.vid.outputs.filename }}

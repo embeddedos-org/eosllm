@@ -59,7 +59,7 @@ jobs:
           npx web-ext build --source-dir=dist --artifacts-dir=. \
             --filename="eosllm-firefox-${VERSION}.xpi" --overwrite-dest
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eosllm-browser-artifacts
           path: |
