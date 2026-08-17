@@ -1,59 +1,96 @@
-# eosllm — On-Device LLM
+# eosllm — On-Device LLM Inference Engine
 
-[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge)](https://github.com/embeddedos-org/eosllm)
-[![Build Status](https://img.shields.io/badge/Build-Passing-success?style=for-the-badge)](https://github.com/embeddedos-org/eosllm/actions)
-[![Test Coverage](https://img.shields.io/badge/Coverage-100%25-success?style=for-the-badge)](https://github.com/embeddedos-org/eosllm)
-[![GPS API](https://img.shields.io/badge/GPS%20API-Integrated-blue?style=for-the-badge)](https://github.com/embeddedos-org/eosllm)
+[![CI](https://github.com/embeddedos-org/eosllm/actions/workflows/ci.yml/badge.svg)](https://github.com/embeddedos-org/eosllm/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/embeddedos-org/eosllm/actions/workflows/codeql.yml/badge.svg)](https://github.com/embeddedos-org/eosllm/actions/workflows/codeql.yml)
+[![Scorecard](https://github.com/embeddedos-org/eosllm/actions/workflows/scorecard.yml/badge.svg)](https://github.com/embeddedos-org/eosllm/actions/workflows/scorecard.yml)
+[![Release](https://github.com/embeddedos-org/eosllm/actions/workflows/release.yml/badge.svg)](https://github.com/embeddedos-org/eosllm/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Large Language Model Inference on Embedded. Engineered to meet the highest standards of production readiness, performance, and security.
+eosllm is an on-device LLM inference engine written in portable ISO C99. It
+compiles to a single static library (`libeosllm.a`) with a stable C ABI
+(`include/eosllm/eosllm.h`, `extern "C"` for C++ callers), plus command-line and
+server tools that run models entirely locally. It is part of the
+[EmbeddedOS (EoS)](https://github.com/embeddedos-org) ecosystem.
 
----
+> Status per the public header: version 0.1.0, ABI 1. The CLI describes current
+> generation as "Phase 1" — greedy text generation from a Llama/Qwen2-class
+> GGUF model.
 
-## 🚀 World-Class Simulation & Analytics
+## Features
 
-### Real-Time Emulation Dashboard
-Below is the real-time simulation dashboard generated from our production test suite. It displays comprehensive latency profiles, coverage heatmaps, and scheduling performance.
+Observed in the source tree:
 
-![Emulation Dashboard](docs/screenshots/eosllm_simulation.png)
+- **Model loading** — magic-byte detection with pluggable readers for the native
+  `.eosm` format and GGUF (used for bring-up) (`include/eosllm/model.h`,
+  `src/format/`).
+- **Quantization** — quant kernels and schemes (`src/quant/`,
+  `docs/quant_schemes.md`).
+- **Inference building blocks** — tokenizer, compute kernels, scheduler, and
+  pluggable backends (`src/tokenizer/`, `src/kernels/`, `src/sched/`,
+  `include/eosllm/backend.h`).
+- **Multimodal hooks** — modality registration (`src/modality/`,
+  `include/eosllm/modality.h`).
+- **OS abstraction** — a portability layer for bring-up on new targets
+  (`src/os/`, `include/eosllm/os.h`, `docs/porting.md`).
+- **Editor & browser integrations** — a VS Code extension that shells out to
+  `eosllm-cli`, and a browser extension that talks to a local `eosllm-server`
+  on `127.0.0.1:7777`.
 
-### Unified Organization Health Matrix
-We continuously benchmark eosllm — On-Device LLM against the entire EmbeddedOS ecosystem to ensure flawless interoperability.
+## What's inside
 
-![Overall Dashboard](docs/screenshots/overall_dashboard.png)
+| Path | Contents |
+|------|----------|
+| `include/eosllm/` | Public headers (`eosllm.h`, `model.h`, `tensor.h`, `quant.h`, `scheduler.h`, `backend.h`, `modality.h`, `os.h`) |
+| `src/` | Engine: `core/`, `format/`, `kernels/`, `quant/`, `sched/`, `tokenizer/`, `modality/`, `os/`, `util/` |
+| `tools/` | `eosllm-cli`, `eosllm-server`, `eosllm-bench`, `eosllm-convert`, `eosllm-quant-lab` |
+| `tests/` | unit test runner, fuzz targets, and more |
+| `browser-extension/` | Chrome/Firefox extension (talks to `eosllm-server`) |
+| `vscode-extension/` | VS Code chat extension (wraps `eosllm-cli`) |
+| `docs/` | ABI, architecture, file format, CLI, server, porting, quant schemes |
 
----
+## Build
 
-## 🎬 Product Marketing Video (App Store Proof of Production)
+Requires a C99 compiler (`cc`/`gcc`/`clang`) and `make`.
 
-Experience eosllm — On-Device LLM in action! Watch our high-fidelity product demonstration and marketing video:
-
-> 🎥 **[Watch the eosllm — On-Device LLM Product Video](docs/videos/eosllm_marketing.mp4)**
-
----
-
-## 🛠️ Production-Grade Architecture
-
-- **Domain**: Blue • Quantized Transformers
-- **GPS Integration**: Production-grade geolocation and time synchronization APIs integrated.
-- **Benchmarks**: Outperforms leading industry standards including **llama.cpp, MLC LLM**.
-
----
-
-## 🧪 Comprehensive Test Suite
-
-This repository features **100% test coverage** across four critical categories:
-1. **Unit Tests**: Full functional coverage of core components.
-2. **Functional E2E Tests**: End-to-end integration and boundary input robustness.
-3. **Performance Benchmarks**: Nanosecond-precision latency profiling.
-4. **Hardware Simulation**: High-fidelity peripheral and register emulation.
-
-To run the entire suite locally:
 ```bash
-python run_all_tests.py
+make lib        # build libeosllm.a
+make tools      # build the CLI, bench, convert, and server binaries
+make            # 'all' target: builds the library
+make help       # list all targets
 ```
 
----
+## Run
 
-## 📜 License & Compliance
+```bash
+# Greedy generation from a GGUF model
+tools/eosllm-cli/eosllm-cli --model <path.gguf> --prompt "Hello" --n 64
 
-Licensed under the MIT License. Aligned with ISO/IEC 25000 software quality standards.
+# Self-contained smoke test against an in-memory synthetic GGUF (no model file)
+tools/eosllm-cli/eosllm-cli --smoke
+
+# Local HTTP/SSE daemon (binds 127.0.0.1:7777 by default)
+tools/eosllm-server/eosllm-server
+tools/eosllm-server/eosllm-server --port 7878
+```
+
+See `docs/cli.md` and `docs/server.md` for the full option and route lists.
+
+## Test
+
+```bash
+make test           # build and run the unit test runner
+make smoke          # CLI smoke test
+make server-smoke   # server liveness smoke test
+make bench          # build the benchmark tool
+```
+
+## Documentation
+
+Reference docs live under `docs/` (ABI, architecture, file format, porting,
+quantization schemes, CLI, and server).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Part of [embeddedos-org](https://github.com/embeddedos-org).
