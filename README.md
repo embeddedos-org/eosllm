@@ -1,4 +1,6 @@
-# eosllm — On-Device LLM Inference Engine
+# eAI LLM — On-Device LLM Inference Engine
+
+> Repository: `eosllm`. Product name: **eAI LLM**. See [Product identity](#product-identity).
 
 [![CI](https://github.com/embeddedos-org/eosllm/actions/workflows/ci.yml/badge.svg)](https://github.com/embeddedos-org/eosllm/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/embeddedos-org/eosllm/actions/workflows/codeql.yml/badge.svg)](https://github.com/embeddedos-org/eosllm/actions/workflows/codeql.yml)
@@ -9,12 +11,51 @@
 eosllm is an on-device LLM inference engine written in portable ISO C99. It
 compiles to a single static library (`libeosllm.a`) with a stable C ABI
 (`include/eosllm/eosllm.h`, `extern "C"` for C++ callers), plus command-line and
-server tools that run models entirely locally. It is part of the
-[EmbeddedOS (EoS)](https://github.com/embeddedos-org) ecosystem.
+server tools that run models entirely locally. It is the **eAI LLM** runtime in
+the [EmbeddedOS (EoS)](https://github.com/embeddedos-org) ecosystem's eAI product
+family.
 
 > Status per the public header: version 0.1.0, ABI 1. The CLI describes current
 > generation as "Phase 1" — greedy text generation from a Llama/Qwen2-class
 > GGUF model.
+
+## Product identity
+
+This repository is the implementation of **eAI LLM**, the local language-model
+runtime in the eAI product family.
+
+§13.1 of the *EmbeddedOS Platform Architecture & Ecosystem Design Document* v0.9
+names the family — eAI Runtime, eAI Vision, eAI Audio, eAI LLM — and says
+directly:
+
+> Avoid exposing multiple overlapping names such as eAI, AIL, and eosllm as
+> unrelated top-level technologies.
+
+Three names for one capability is a cost paid by everyone evaluating the
+platform, so the product name is **eAI LLM** from here on. §31 lists this as a
+near-term milestone.
+
+**What does not change.** This is a naming decision, not a technical one:
+
+| | |
+|---|---|
+| Repository | `embeddedos-org/eosllm` — unchanged |
+| Library | `libeosllm.a` — unchanged |
+| Public header | `include/eosllm/eosllm.h` — unchanged |
+| C ABI | ABI 1 — unchanged |
+| Symbol prefix | `eosllm_` — unchanged |
+| Tools | `eosllm-cli`, `eosllm-bench` — unchanged |
+
+Renaming the repository, the artifacts or the ABI would break every existing
+consumer and is a separate decision that needs its own ADR. Nothing in this
+change touches the build.
+
+**Relationship to eAI.** eAI Runtime owns model execution, memory planning and
+accelerator abstraction for the general case. eAI LLM is the specialised
+language-model runtime alongside it. Neither depends on the other today; §6's
+dependency rule applies if that changes — eAI may depend on EoS services, and
+EoS must not depend on eAI.
+
 
 ## Features
 
