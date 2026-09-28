@@ -9,8 +9,10 @@
 eosllm is an on-device LLM inference engine written in portable ISO C99. It
 compiles to a single static library (`libeosllm.a`) with a stable C ABI
 (`include/eosllm/eosllm.h`, `extern "C"` for C++ callers), plus command-line and
-server tools that run models entirely locally. It is part of the
-[EmbeddedOS (EoS)](https://github.com/embeddedos-org) ecosystem.
+server tools that run models entirely locally. It is the LLM inference runtime
+of the [eAI](https://github.com/embeddedos-org/eAI) product family — eAI is the
+on-device AI layer of the [EmbeddedOS](https://github.com/embeddedos-org)
+ecosystem, and eosllm is the engine that runs large language models within it.
 
 > Status per the public header: version 0.1.0, ABI 1. The CLI describes current
 > generation as "Phase 1" — greedy text generation from a Llama/Qwen2-class
