@@ -77,6 +77,38 @@ FLAGS := \
   EOSLLM_HAVE_FORMAT_EOSM EOSLLM_HAVE_FORMAT_GGUF \
   EOSLLM_HAVE_SCHED_GREEDY EOSLLM_HAVE_SCHED_DEADLINE EOSLLM_HAVE_SCHED_BATCHED
 
+# Host-OS detection. Drives the default win32-on-windows behaviour and
+# the platform-specific link flags for tools/eosllm-server (-lws2_32 on
+# MinGW / MSVC, nothing extra on POSIX).
+HOST_OS := $(shell uname -s 2>/dev/null)
+IS_WINDOWS := 0
+ifneq (,$(findstring MINGW,$(HOST_OS)))
+  IS_WINDOWS := 1
+endif
+ifneq (,$(findstring MSYS,$(HOST_OS)))
+  IS_WINDOWS := 1
+endif
+ifneq (,$(findstring CYGWIN,$(HOST_OS)))
+  IS_WINDOWS := 1
+endif
+ifeq ($(OS),Windows_NT)
+  IS_WINDOWS := 1
+endif
+
+# Default Windows build to the Win32 OS shim. MinGW-w64 has no
+# posix_memalign, so the POSIX shim cannot compile there; build/config.mk.in
+# unconditionally defaults HAVE_POSIX=1/HAVE_WIN32=0, which broke the
+# Windows CI legs. Only applies when the caller left the flags at their
+# config.mk(.in) defaults -- an explicit EOSLLM_HAVE_POSIX=1 still wins.
+ifeq ($(IS_WINDOWS),1)
+  ifeq ($(origin EOSLLM_HAVE_WIN32),file)
+    override EOSLLM_HAVE_WIN32 := 1
+  endif
+  ifeq ($(origin EOSLLM_HAVE_POSIX),file)
+    override EOSLLM_HAVE_POSIX := 0
+  endif
+endif
+
 # ---------------------------------------------------------------------
 # Auto-enable AVX2 / NEON on hosts that support it, when the user
 # hasn't explicitly set the flag (i.e. it's still the build/config.mk.in
@@ -134,24 +166,6 @@ endif
 # WASM SIMD128 backend (only meaningful under emcc; no-op elsewhere).
 ifeq ($(EOSLLM_HAVE_KERNEL_WASM_SIMD),1)
   override CFLAGS += -msimd128
-endif
-
-# Host-OS detection. Drives the default win32-on-windows behaviour and
-# the platform-specific link flags for tools/eosllm-server (-lws2_32 on
-# MinGW / MSVC, nothing extra on POSIX).
-HOST_OS := $(shell uname -s 2>/dev/null)
-IS_WINDOWS := 0
-ifneq (,$(findstring MINGW,$(HOST_OS)))
-  IS_WINDOWS := 1
-endif
-ifneq (,$(findstring MSYS,$(HOST_OS)))
-  IS_WINDOWS := 1
-endif
-ifneq (,$(findstring CYGWIN,$(HOST_OS)))
-  IS_WINDOWS := 1
-endif
-ifeq ($(OS),Windows_NT)
-  IS_WINDOWS := 1
 endif
 
 ifeq ($(IS_WINDOWS),1)
@@ -623,3 +637,4 @@ determinism: $(TEST_BIN)
 # ---------------------------------------------------------------------
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
