@@ -69,6 +69,9 @@ jobs:
           pip install pytest pytest-cov pytest-benchmark
 
       - name: Run Python unit tests
+        # bash: the backslash line continuation below is a PowerShell
+        # parse error on the windows-2022 legs (Git Bash exists there).
+        shell: bash
         # Scope coverage to tests/unit: this step runs only the unit suite.
         # --cov=. dragged in the functional/simulation/performance suites
         # (run by later steps without coverage), so the 100% gate could
