@@ -185,3 +185,37 @@ revision being tagged."
 | Tag    | Date       | Sign-off (handle)              |
 |--------|------------|---------------------------------|
 | v0.1.0 | _pending_  | _pending_                       |
+
+---
+
+## MCP surface: hostile-protocol posture (2026-10-07)
+
+eosllm as an on-device inference service exposes an MCP/tool surface. This
+threat-model update adopts a **hostile-protocol posture**: the MCP protocol
+itself is treated as hostile-by-default, not just any particular
+implementation.
+
+Evidence (Oct 6 reporting): the ClawSecure AI Agent Threat Report Vol 1
+(Sept 24, reported Oct 6) documents cracked Linear MCP, Notion, and Dropbox
+Dash integrations and concludes the gap sits **in the MCP protocol itself**,
+not in vendor bugs. The chain-of-trust story is concrete: MCP servers hold
+credentials for every agent, agents trust each other by default, and one
+compromised agent becomes a launchpad into the network.
+
+Requirements this posture imposes on the eosllm MCP surface:
+
+1. **Allowlisted servers** — no server is loaded unless explicitly allowed.
+2. **Pinned versions** — the allowed set pins exact server versions; upgrades
+   are reviewed changes, not floating tags.
+3. **Credential isolation from servers** — servers never hold credentials
+   they do not need; credentials live outside the server trust boundary.
+4. **Upstream-response redaction** — responses from MCP servers are
+   scrubbed before they reach the agent context (see also the eIPC
+   upstream-response redaction requirement, same date).
+5. **No implicit intra-network trust** — agents and servers on the same
+   network do not trust each other by default; every crossing is
+   authenticated.
+
+Governance note: MCP is now a Linux Foundation project — shared governance
+with Zephyr. Track normative security requirements as they develop there;
+this posture stands until the spec carries them.
