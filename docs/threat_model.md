@@ -219,3 +219,26 @@ Requirements this posture imposes on the eosllm MCP surface:
 Governance note: MCP is now a Linux Foundation project — shared governance
 with Zephyr. Track normative security requirements as they develop there;
 this posture stands until the spec carries them.
+
+### Patch-level evidence (2026-10-08)
+
+Two CVEs disclosed this week convert the protocol-level warnings above
+into patch-level evidence:
+
+- **CVE-2026-105697 (CVSS 9.9, disclosed Oct 5):** Langflow's MCP server
+  configuration executed the user-typed `command` wrapped in `bash -c`
+  with **no allowlist** — a config file became arbitrary OS command
+  execution on the host. Patch: upgrade to 1.10.3. The eosllm
+  mitigation is requirement 1 above (allowlisted servers) extended to
+  *commands*: any tool registration that names an executable command
+  must declare it against an explicit allowlist; a config-supplied
+  command is untrusted input, not configuration.
+- **CVE-2026-104120 (published Oct 2):** `mcp-server-fetch` <= 2026.6.4,
+  SSRF via `fetch_url`, with a publicly disclosed exploit. The eosllm
+  mitigation: fetch-style tools are network egress and get the same
+  treatment as any other egress -- allowlisted destinations, no
+  implicit trust from being "just a tool".
+
+Both are the same lesson as the ClawSecure findings from opposite ends:
+the Langflow case is what happens with no allowlist (CVSS 9.9), and the
+allowlist requirement above is what prevents it.
