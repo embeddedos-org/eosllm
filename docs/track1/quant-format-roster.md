@@ -21,3 +21,25 @@ Notes:
   never emit zero-weight placeholders.
 - Cross-repo metric: **tokens-per-watt** (adopted for the accelerator
   HAL tiers) is how formats are compared once they run on hardware.
+
+## SLM candidates for the ternary / BitNet-1.58 tier
+
+Answers the standing 10-08 open question: which small models belong on the
+ternary tier. Candidates are judged on (a) a real ternary or ternary-able
+checkpoint, (b) MCU-plausible size, (c) a producer that can emit the
+`bitnet-1.58` artifact above.
+
+| Model | Size class | Ternary story | Producer -> consumer | Status |
+|---|---|---|---|---|
+| BitNet b1.58 2B4T-class | ~2B params | Native 1.58-bit weights ({-1,0,+1}) | `ebuild quantize --format bitnet-1.58` -> eAI ternary tier | Reference |
+| TinyLlama 1.1B | 1.1B params | Ternary-able via post-training quantization; the federated-learning datapoint (`docs/track1/federated-learning-edge.md`) shows it fine-tunes on edge clients | `ebuild quantize` -> eAI runtime / eosllm | Candidate |
+| SmolLM2 1.7B-class | ~1.7B params | Strong small-model baseline; ternary conversion experimental | `ebuild quantize --format bitnet-1.58` (experimental) -> eAI ternary tier | Candidate |
+
+Notes:
+
+- "Reference" means the tier was designed around it (the ESP32-S3
+  0.4B-parameter SPI daisy-chain demo); "Candidate" means the conversion
+  path exists but is not yet validated end-to-end on the tier.
+- No model ships on the ternary tier until its converted artifact passes
+  the tier's validation gate — the same fail-closed invariant as the
+  format rows above.
