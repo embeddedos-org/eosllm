@@ -117,3 +117,22 @@ to:
 is an ABI-style change that bumps `EOSLLM_SERVER_VERSION` in
 `tools/eosllm-server/main.c` AND adds a `[Changed]` entry under
 the corresponding release in `CHANGELOG.md`.
+
+## MCP Registry (`server.json`)
+
+The repo root carries a `server.json` describing the eosllm server
+surface for the MCP Registry and the org's Agent fabric discovery:
+name (`io.github.embeddedos-org/eosllm`), the local SSE endpoint the
+daemon binds by default, and the package version. Its `version`
+field must always equal `EOSLLM_VERSION_MAJOR.MINOR.PATCH` from
+`include/eosllm/eosllm.h`; the `server.json validation` workflow
+runs the org's reusable validator
+(`embeddedos-org/.github` `reusable-server-json.yml`) on every change
+to either file and fails on drift — stale registry metadata is the
+failure mode this exists to prevent.
+
+Publishing to the MCP Registry is a manual, one-command step once a
+release cadence exists (`mcp-publisher publish`, GitHub OIDC — no
+stored secret); it is deliberately not automated yet, and the
+registry listing is discovery only. This file, checked by CI, is
+the source of truth.

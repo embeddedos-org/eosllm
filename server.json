@@ -1,0 +1,15 @@
+{
+  "name": "io.github.embeddedos-org/eosllm",
+  "description": "eosllm — on-device LLM inference engine for EmbeddedOS. The eosllm-server daemon exposes the engine over a local HTTP/SSE API (health, capabilities, generation) for clients that cannot embed the C library directly.",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/embeddedos-org/eosllm"
+  },
+  "remotes": [
+    {
+      "type": "sse",
+      "url": "http://127.0.0.1:7777/"
+    }
+  ]
+}
