@@ -1,0 +1,35 @@
+# eosllm
+
+> llms.txt for the eosllm repository (embeddedos-org/eosllm).
+> Status: on-device LLM inference engine in portable ISO C99 —
+> version 0.1.0, ABI 1 (per `include/eosllm/eosllm.h`). The MCP
+> server metadata is registered via the root `server.json`
+> (io.github.embeddedos-org/eosllm, v0.1.0).
+
+eosllm is the LLM inference runtime of the eAI product family —
+the on-device AI layer of EmbeddedOS. It compiles to a single
+static library (`libeosllm.a`) with a stable C ABI, plus
+command-line and local HTTP/SSE server tools that run
+Llama/Qwen2-class GGUF models (and the native `.eosm` format)
+entirely locally: greedy text generation, quantization schemes,
+and capability-scoped inference for agents.
+
+## Docs
+
+- [Architecture](docs/architecture.md) — engine structure and inference path
+- [Server](docs/server.md) — the local HTTP/SSE daemon and its MCP registry entry
+- [File format](docs/file_format.md) — the native `.eosm` model format
+- [CLI](docs/cli.md) — command-line tools and options
+- [ABI](docs/abi.md) — the stable C ABI contract
+- [Quantization schemes](docs/quant_schemes.md) — supported quant formats and kernels
+- [Porting](docs/porting.md) — bringing eosllm to a new platform/OS
+- [Threat model](docs/threat_model.md) — trust boundaries for on-device inference
+- [Capability manifest](docs/track1/capability-manifest.md) — Track 1: declared model capabilities
+- [Inference service](docs/track1/inference-service.md) — Track 1: inference as an OS service
+- [Orchestrator](docs/track1/orchestrator.md) — Track 1: on-device orchestration
+- [Quant format roster](docs/track1/quant-format-roster.md) — Track 1: format support roster
+
+## Machine-readable
+
+- [server.json](server.json) — MCP Registry metadata for the eosllm server
+- [llms-full.txt](llms-full.txt) — this corpus concatenated as one document

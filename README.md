@@ -89,7 +89,9 @@ make bench          # build the benchmark tool
 ## Documentation
 
 Reference docs live under `docs/` (ABI, architecture, file format, porting,
-quantization schemes, CLI, and server).
+quantization schemes, CLI, and server). For agents and LLM tooling, the same
+corpus is indexed in [`llms.txt`](llms.txt) and concatenated in
+[`llms-full.txt`](llms-full.txt).
 
 ## License
 
