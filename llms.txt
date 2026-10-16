@@ -24,6 +24,8 @@ and capability-scoped inference for agents.
 - [Quantization schemes](docs/quant_schemes.md) — supported quant formats and kernels
 - [Porting](docs/porting.md) — bringing eosllm to a new platform/OS
 - [Threat model](docs/threat_model.md) — trust boundaries for on-device inference
+- [Benchmarks](docs/benchmarks.md) — the matmul microbench and how results are produced
+- [Release pipeline](docs/release.md) — operator manual for the engine release pipeline
 - [Capability manifest](docs/track1/capability-manifest.md) — Track 1: declared model capabilities
 - [Inference service](docs/track1/inference-service.md) — Track 1: inference as an OS service
 - [Orchestrator](docs/track1/orchestrator.md) — Track 1: on-device orchestration

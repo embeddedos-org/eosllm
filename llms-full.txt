@@ -17,6 +17,8 @@ Sources, in order:
 - `docs/track1/inference-service.md`
 - `docs/track1/orchestrator.md`
 - `docs/threat_model.md`
+- `docs/benchmarks.md`
+- `docs/release.md`
 
 # === docs/architecture.md ===
 
@@ -1717,3 +1719,320 @@ into patch-level evidence:
 Both are the same lesson as the ClawSecure findings from opposite ends:
 the Langflow case is what happens with no allowlist (CVSS 9.9), and the
 allowlist requirement above is what prevents it.
+
+# === docs/benchmarks.md ===
+
+# Benchmarks
+
+> **Status (v0.1).** A self-serve matmul microbench is implemented and
+> wired into CI. End-to-end LLM benchmarks (tokens/sec on real models)
+> are tracked separately and require user-supplied model files.
+
+## What's actually measured today
+
+`tools/eosllm-bench` runs `matmul_f32`, `matmul_q8_0`, and `matmul_q4_k`
+across every registered backend whose runtime probe passes, at six
+fixed shapes (M = 1, N ∈ {1, 8, 64, 128, 256, 512}, K ∈ {256 … 4096}).
+Per-shape iteration count is auto-tuned to ~50 ms of work. Output is
+JSON: `{ library_version, abi_version, backends_probed, records[] }`
+where each record is `(backend, op, m, n, k, n_iters, total_ns,
+ns_per_iter, giga_ops_per_s)`.
+
+## Running it
+
+```
+make benchmark
+```
+
+Auto-detects host ISA (`uname -m`):
+
+| arch         | flag added                       |
+|--------------|----------------------------------|
+| `x86_64`     | `EOSLLM_HAVE_KERNEL_AVX2=1`      |
+| `aarch64`    | `EOSLLM_HAVE_KERNEL_NEON=1`      |
+| other        | scalar only                      |
+
+Output lands at `docs/benchmarks/host.json` (gitignored — volatile per host).
+
+`make benchmark` does a `make clean` first so the autoconf flags
+actually take effect; expect a 10-30 s wall time.
+
+## Comparing against a baseline
+
+```
+# Once: snapshot today's numbers as the reference for this CPU.
+cp docs/benchmarks/host.json docs/benchmarks/baseline-x86_64.json
+
+# Later: run the bench again and diff.
+make bench-diff
+```
+
+`make bench-diff` runs `make benchmark` and then
+`tools/bench_diff.py docs/benchmarks/baseline-$(HOST_ARCH).json
+docs/benchmarks/host.json`. Override the baseline path with
+`BASELINE=...`. Exits non-zero if any record's
+`giga_ops_per_s` regresses by more than the threshold (default 10 %).
+
+The default `.gitignore` lets baselines live in-repo via the
+`docs/benchmarks/baseline-*.json` whitelist; run-time `host.json`
+files do not.
+
+## Sanitizer-clean bench
+
+```
+make sanitize-bench
+```
+
+Builds the bench with `-fsanitize=address,undefined`,
+`ASAN_OPTIONS=detect_leaks=1`, and runs the full microbench plus
+`--shapes-only`. Catches kernel-level bugs that the unit suite
+misses (unaligned loads in AVX2/NEON intrinsics, OOB reads on the
+synthetic Q4_K weight buffer, leaks across the bench's own
+malloc cycle). Bar: zero ASan/UBSan reports.
+
+## CI
+
+The `benchmark` job in `.github/workflows/ci.yml` runs `make
+benchmark` on every PR, `cat`s the JSON to the job log, and uploads
+`docs/benchmarks/host.json` as an artifact named
+`bench-${{ github.sha }}` via `actions/upload-artifact@v4`. Reviewers
+can download two artifacts and run `tools/bench_diff.py` locally to
+see per-shape deltas across PRs.
+
+## Reference numbers (informational, will vary by CPU)
+
+These are from a single run on the developer machine
+(AMD Threadripper PRO 3975WX, Linux x86_64, gcc 9, debug build).
+**Not committed as a baseline** — your CPU will produce different
+absolute numbers; what matters is intra-host stability and the AVX2
+vs scalar ratios.
+
+| op           | shape (M×N×K) | scalar GOPS | x86_avx2 GOPS | speedup |
+|--------------|---------------|-------------|---------------|--------:|
+| matmul_f32   | 1×1×256       | 0.70        | 2.20          | 3.1×    |
+| matmul_f32   | 1×128×2048    | 0.71        | 2.58          | 3.6×    |
+| matmul_f32   | 1×256×4096    | 0.71        | 2.62          | 3.7×    |
+| matmul_q8_0  | 1×128×2048    | 0.70        | (scalar only) | —       |
+| matmul_q4_k  | 1×128×2048    | 0.68        | 0.97          | 1.4×    |
+
+Notes on the modest Q4_K speedup: at M=1 and these K values the
+kernel is **memory-bandwidth-bound** on the Q4_K weight buffer, not
+compute-bound. The AVX2 path saves wall time on the f32 math but
+not on byte traffic. The future int8 fused path
+(`_mm256_maddubs_epi16` over packed quants) is expected to roughly
+double Q4_K throughput once it lands.
+
+## End-to-end LLM benchmarks (deferred)
+
+Tokens/sec, time-to-first-token, peak RSS on real models — the
+"benchmarks ≥ 3 model × HW combinations" target from
+`~/.llms/plans/eosllm_production_roadmap.plan.md` Session 14 — is
+deferred until model files are dropped into `tests/data/`. The
+current bench is the regression net for the kernels themselves;
+end-to-end will reuse the same JSON shape with new record types.
+
+# === docs/release.md ===
+
+# Release pipeline
+
+This document is the operator manual for the **engine** release
+pipeline. (Editor and browser-extension publishes have their own
+docs: `vscode-extension/README.md`, `browser-extension/README.md`.)
+
+## TL;DR
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+GitHub Actions then runs `.github/workflows/release.yml`, which:
+
+1. resolves the version from the tag,
+2. builds Linux x86_64, Linux aarch64, macOS universal (arm64+x86_64),
+   and Windows x86_64 binaries in parallel jobs,
+3. packages a source tarball,
+4. computes `SHA256SUMS` over every artifact,
+5. (optional) signs `SHA256SUMS` with minisign,
+6. publishes a single GitHub Release with everything attached.
+
+The release is created as `draft: false`. If the tag contains `-`
+(e.g. `v0.2.0-rc1`) it's flagged as a `prerelease`.
+
+## Required GitHub repo secrets
+
+The pipeline runs without any secrets — but the binaries it ships will
+be **unsigned** and the release notes will say so. To enable each
+signing path, add the corresponding secret in
+**Settings → Secrets and variables → Actions**.
+
+| Secret name | Purpose | Required for |
+|---|---|---|
+| `MINISIGN_KEY` | Encrypted minisign secret key (full file contents, including the `untrusted comment:` lines) | Signing `SHA256SUMS` |
+| `MINISIGN_PASSWORD` | Passphrase that decrypts `MINISIGN_KEY` | Signing `SHA256SUMS` |
+| `APPLE_DEVELOPER_ID_CERT_P12_B64` | Base64-encoded Developer ID Application certificate (`base64 -i Cert.p12 \| pbcopy`) | macOS codesign + notarization |
+| `APPLE_DEVELOPER_ID_PASSWORD` | Passphrase that decrypts the `.p12` | macOS codesign |
+| `APPLE_TEAM_ID` | Apple Developer Team ID (10-char) | macOS codesign + notarization |
+| `APPLE_NOTARY_KEY_ID` | App Store Connect API key ID (10-char) | macOS notarization |
+| `APPLE_NOTARY_ISSUER_ID` | App Store Connect issuer ID (UUID) | macOS notarization |
+| `APPLE_NOTARY_KEY_P8_B64` | Base64 of the `.p8` private key file | macOS notarization |
+| `WINDOWS_CERT_PFX_B64` | Base64-encoded Authenticode `.pfx` | Windows signing |
+| `WINDOWS_CERT_PASSWORD` | Passphrase for the `.pfx` | Windows signing |
+
+Each secret is **optional**. The corresponding step is gated on the
+secret's presence; missing secrets cause the workflow to ship that
+platform's binary unsigned (and only that platform).
+
+## Per-platform jobs
+
+### `build-linux-x86_64`
+
+Runs on `ubuntu-latest`. Standard host build. The Makefile auto-detects
+AVX2 from `/proc/cpuinfo` and builds with `-mavx2 -mfma`. Runs
+`make all-checks` (the canonical health gate, ~5 min) before staging
+the tarball.
+
+### `build-linux-aarch64`
+
+Runs on `ubuntu-latest`. Cross-compile with `gcc-aarch64-linux-gnu`
+plus `-static`. Runs the unit suite under `qemu-user-static` to catch
+endianness or NEON intrinsic regressions.
+
+### `build-macos-universal`
+
+Runs on `macos-14` (the only macos GHA runner image with an
+arm64-native build environment as of this writing).
+`tools/release/build_macos_universal.sh` builds the engine twice
+(`-target arm64-apple-macos11` and `-target x86_64-apple-macos11`)
+then `lipo`-merges every binary + `libeosllm.a`. If the Apple secrets
+are present, `tools/release/sign_and_notarize_macos.sh` codesigns each
+binary, submits to `notarytool`, and waits for the ticket.
+
+### `build-windows-x86_64`
+
+Runs on `windows-latest` under `msys2/setup-msys2@v2` with the
+`MINGW64` environment. Builds with the `EOSLLM_HAVE_WIN32` shim
+enabled and POSIX disabled, statically links against `libgcc` so the
+binary runs on a vanilla Windows install. If `WINDOWS_CERT_PFX_B64`
+is set, `tools/release/sign_windows.ps1` Authenticode-signs every
+`.exe` with SHA-256 + RFC 3161 timestamp.
+
+### `build-source-tarball`
+
+`git archive` of `HEAD` with prefix `eosllm-${version}/`. Same as the
+old single-job workflow.
+
+### `wasm-stub`
+
+Currently `if: false` — the slot is reserved for Phase F (WASM
+matmul kernel + Emscripten OS shim + IndexedDB model cache). When
+implemented, flip the gate and the WASM artifact joins the release
+matrix.
+
+### `publish-release`
+
+Aggregator job. Downloads every other job's artifacts, computes
+`SHA256SUMS`, optionally minisigns it, and posts the GitHub Release.
+The actual `softprops/action-gh-release@v2` step is gated on
+`startsWith(github.ref, 'refs/tags/v')` so `workflow_dispatch` runs
+build everything but skip publication.
+
+## Verification
+
+### Hash check
+
+```
+sha256sum --check SHA256SUMS
+```
+
+### minisign (optional)
+
+```
+# eosllm-release.pub fingerprint is published in SECURITY.md.
+minisign -V -p eosllm-release.pub -m SHA256SUMS
+```
+
+### macOS codesign
+
+```
+codesign --verify --deep --strict --verbose=2 eosllm-cli
+spctl --assess --type execute --verbose eosllm-cli
+```
+
+### Windows signtool
+
+```
+signtool verify /pa /v eosllm-cli.exe
+```
+
+## Unsigned binaries
+
+If `SHA256SUMS` doesn't have a `SHA256SUMS.minisig` next to it, the
+release is **not** verifiable beyond the hash. If you trust the
+`HTTPS GitHub Release URL`, the SHA256 is sufficient; if you don't,
+build from source via the source tarball (the build is reproducible).
+
+### macOS Gatekeeper bypass (unsigned releases only)
+
+```
+xattr -dr com.apple.quarantine eosllm-cli
+```
+
+…or right-click → *Open* the first time. Both bypass Gatekeeper for
+the specific binary; do not blanket-disable Gatekeeper.
+
+### Windows SmartScreen (unsigned releases only)
+
+SmartScreen will warn on first launch. Click **More info → Run anyway**.
+Microsoft's reputation system clears unsigned binaries after enough
+unique installs, but for a fresh release the warning is expected.
+
+## Cutting a tag
+
+```
+# 1. Update CHANGELOG.md — move [Unreleased] entries under [vX.Y.Z]
+#    with today's date.
+# 2. Run the local health gate one last time.
+make all-checks
+
+# 3. Tag and push.
+git tag v0.2.0 -m "v0.2.0 — multi-platform release"
+git push origin v0.2.0
+```
+
+The workflow will start within seconds. Watch progress under the
+**Actions** tab; if any platform job fails the publish-release job
+won't trigger.
+
+## Cutting a release-candidate
+
+```
+git tag v0.2.0-rc1
+git push origin v0.2.0-rc1
+```
+
+The same workflow runs; the GitHub Release is flagged
+`prerelease: true` (so it doesn't show up as the "latest" release).
+
+## Rollback / unpublish
+
+```
+gh release delete v0.2.0 --yes
+git push --delete origin v0.2.0
+git tag --delete v0.2.0
+```
+
+The artifacts are deleted from the Release page; the build artifacts
+(uploaded via `actions/upload-artifact`) are GC'd by GitHub after 90
+days regardless.
+
+## Future: shipping a separate update channel
+
+Each subdirectory has its own tag-driven publisher workflow:
+
+- Engine: `vX.Y.Z`            → `release.yml` (this doc)
+- VS Code extension: `vscode-vX.Y.Z` → `release-vscode-extension.yml`
+- Browser extension: `browser-vX.Y.Z` → `release-browser-extension.yml`
+
+The three are independent so a hot-fix to one doesn't force a re-tag
+of the others.
