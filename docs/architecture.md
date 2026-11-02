@@ -5,6 +5,16 @@ contracts, the file format, and the build flags. Implementation details live
 in subsystem-specific docs (`abi.md`, `file_format.md`, `quant_schemes.md`,
 `porting.md`).
 
+## Product family
+
+eosllm is the LLM inference runtime of the
+[eAI](https://github.com/embeddedos-org/eAI) product family. eAI is the
+on-device AI layer of the EmbeddedOS ecosystem (runtime contracts, agent
+runtimes, model-format loaders, platform adapters); eosllm is the engine that
+runs large language models inside that layer. This grouping is documentation
+only: the repository, the library (`libeosllm.a`), the C ABI (`eos_*` symbols),
+and the `eosllm-*` tools keep their existing names.
+
 ## Design principles (non-negotiable)
 
 - **Zero allocations in the hot path.** All inference memory is taken from a

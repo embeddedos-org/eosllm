@@ -1,12 +1,10 @@
 [run]
 branch = True
-source = .
 omit =
-    *tests*
-    *setup.py
-    *.github*
-    *venv*
-    *virtualenv*
+    */setup.py
+    */.github/*
+    */venv/*
+    */virtualenv/*
 
 [report]
 show_missing = True

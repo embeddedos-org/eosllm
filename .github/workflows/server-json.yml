@@ -1,0 +1,27 @@
+name: server.json validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - server.json
+      - include/eosllm/eosllm.h
+      - .github/workflows/server-json.yml
+  pull_request:
+    paths:
+      - server.json
+      - include/eosllm/eosllm.h
+      - .github/workflows/server-json.yml
+
+permissions:
+  contents: read
+
+jobs:
+  server-json:
+    uses: embeddedos-org/.github/.github/workflows/reusable-server-json.yml@master
+    with:
+      server_json_path: server.json
+      # Must equal EOSLLM_VERSION_MAJOR.MINOR.PATCH in
+      # include/eosllm/eosllm.h — bump both together. The reusable
+      # validator fails the build when server.json drifts from this.
+      expected_version: "0.1.0"

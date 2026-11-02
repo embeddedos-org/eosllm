@@ -114,6 +114,10 @@ class TestKVCache(unittest.TestCase):
         self.cache.append([1.0]*64,[2.0]*64)
         keys = self.cache.get_keys()
         self.assertEqual(len(keys),1)
+    def test_get_values_returns_copy(self):
+        self.cache.append([1.0]*64,[2.0]*64)
+        vals = self.cache.get_values()
+        self.assertEqual(len(vals),1)
 
 class TestQuantizedWeight(unittest.TestCase):
     def test_dequantize_close_to_original(self):
