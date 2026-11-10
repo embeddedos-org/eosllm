@@ -61,6 +61,13 @@ jobs:
         shell: msys2 {0}
         run: make test CC=gcc
 
+      # The C suite has no forward pass, so nothing else checks what the CLI
+      # does with the tokens a model produces. The script writes a tiny GGUF with
+      # python3, which the MSYS2 shell on the Windows legs does not have.
+      - name: CLI stops at the end-of-sequence token
+        if: matrix.os != 'windows-2022'
+        run: make cli && bash tests/cli/test_stop_at_eos.sh
+
       - name: Install Python test dependencies
         # The Python tests are stdlib-only wrappers around the C core;
         # only the test runners themselves need installing.

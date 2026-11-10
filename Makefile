@@ -429,6 +429,9 @@ smoke: cli
 #                       last_error set).
 #                       Expected last_error: eos_model_open names
 #                       os.file_open.
+#   stop-at-eos       : tests/cli/test_stop_at_eos.sh generates from a tiny
+#                       Llama GGUF and expects generation to end at the
+#                       model's eos_token_id with reason "eos".
 # Every variant exits 0 when it reaches its happy/expected outcome.
 smoke-all: cli
 	@set -e; \
@@ -458,7 +461,9 @@ smoke-all: cli
 	o=$$(bash tests/fuzz/test_metadata.sh 2>&1); \
 	echo "$$o" | grep -q '"general.architecture": "smoke"' \
 	  || { echo "FAIL: --metadata smoke missing architecture key"; echo "$$o"; exit 1; }; \
-	echo "smoke-all: OK (6 variants, expected output verified in each)"
+	echo "--- stop-at-eos ---"; \
+	bash tests/cli/test_stop_at_eos.sh; \
+	echo "smoke-all: OK (7 variants, expected output verified in each)"
 
 # all-checks: one-command "is the tree healthy" gate. Chains every
 # correctness + lifecycle + sanitizer + perf-regression check that
