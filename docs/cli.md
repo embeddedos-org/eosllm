@@ -69,7 +69,7 @@ record:
 | Key | Type | Notes |
 |---|---|---|
 | `done` | bool | Always `true`. Disambiguates from per-token records. |
-| `reason` | string | `"eos"` (model emitted EOS), `"max"` (`--max-tokens` reached), `"user"` (deadline elapsed), `"error"` (engine failure). |
+| `reason` | string | `"eos"` (the model emitted its `tokenizer.ggml.eos_token_id`; that token gets no record and is not counted in `n_tokens`), `"max"` (`--max-tokens` reached), `"user"` (deadline elapsed), `"error"` (engine failure). |
 | `n_tokens` | int | Tokens actually emitted before the terminator. |
 | `ms` | int | Wall time in milliseconds. Currently always `0` (TODO: wire `eosi_now_ns`). |
 | `tok_per_s` | int | Throughput in tokens per second. Currently always `0`. |

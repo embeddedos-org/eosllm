@@ -519,6 +519,12 @@ int main(int argc, char **argv) {
     {
         int n_emitted = 0;
         const char *reason = "max";
+        /* The greedy scheduler returns the end-of-sequence id like any
+         * other token, so the stop is decided here. A model without
+         * tokenizer.ggml.eos_token_id runs to --n as before. */
+        uint64_t eos_id = 0;
+        int      have_eos =
+            (eos_model_meta_u64(m, "tokenizer.ggml.eos_token_id", &eos_id) == EOS_OK);
         for (i = 0; i < n_predict; ++i) {
             uint32_t tok;
             char     buf[64];
@@ -527,6 +533,10 @@ int main(int argc, char **argv) {
             if (s != EOS_OK) {
                 reason = (s == EOS_E_DEADLINE) ? "user" : "error";
                 if (!stream_jsonl) fprintf(stderr, "\nstep: %s\n", eos_status_str(s));
+                break;
+            }
+            if (have_eos && (uint64_t)tok == eos_id) {
+                reason = "eos";
                 break;
             }
             s = eos_session_decode(ss, &tok, 1, buf, &len);

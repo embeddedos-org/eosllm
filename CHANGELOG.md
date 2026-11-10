@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `eosllm-cli` stops generating when the model emits `tokenizer.ggml.eos_token_id` and reports `"reason":"eos"` in `--stream-jsonl`. It used to print the end-of-sequence token and keep going until `--n`.
+
 ## [3.0.1] - 2026-05-16
 
 ### Production Release — Unified EmbeddedOS-org v3.0.1
