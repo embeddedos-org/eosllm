@@ -5,6 +5,7 @@
 ### Fixed
 
 - `eosllm-cli` stops generating when the model emits `tokenizer.ggml.eos_token_id` and reports `"reason":"eos"` in `--stream-jsonl`. It used to print the end-of-sequence token and keep going until `--n`.
+- `eos_session_feed()` puts each prompt token into the KV cache once. The last token of the prompt used to go in twice (once in the prefill and again on the first `eos_session_step()`), so the first new token was predicted from the wrong context, and a prompt that exactly filled `--ctx` produced no token at all.
 
 ## [3.0.1] - 2026-05-16
 
