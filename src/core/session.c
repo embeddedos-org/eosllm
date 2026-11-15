@@ -28,6 +28,12 @@ struct eos_session {
     const eos_tokenizer_vt_t   *tok_vt;
     void                       *sched_state;
     const eos_sched_vt_t       *sched_vt;
+
+    /* The token the scheduler feeds on its next step: the last token of
+     * the latest input chunk, or the last token step() returned. It is
+     * not in the KV cache yet. */
+    uint32_t                    pending_token;
+    int                         has_pending;
 };
 
 /* ------------------------------------------------------------------ */
@@ -203,14 +209,26 @@ eos_status_t eos_session_feed(eos_session_t      *session,
         if (s != EOS_OK) { eosi_free(ids); return s; }
         if (n == 0) { eosi_free(ids); return EOS_OK; }
 
-        /* Stage 2: prefill all tokens through the decoder so KV is
-         * populated. The very last token becomes the seed for the
-         * scheduler's next step. */
+        /* Stage 2: prefill the KV cache with every token except the
+         * last one. The scheduler's step runs its seed token through
+         * the decoder before sampling, so the last token is held back
+         * as the seed; prefilling it as well would put it in the cache
+         * twice. A token still pending from an earlier feed or step
+         * goes in first. */
         {
             float *throwaway = (float *)eosi_alloc(
                 session->text->n_vocab * sizeof(float), 16);
             if (throwaway == NULL) { eosi_free(ids); return EOS_E_OUT_OF_MEMORY; }
-            for (i = 0; i < n; ++i) {
+            if (session->has_pending) {
+                eos_status_t r = eosi_text_step(session->text,
+                                                session->pending_token,
+                                                throwaway);
+                if (r != EOS_OK) {
+                    eosi_free(throwaway); eosi_free(ids); return r;
+                }
+                session->has_pending = 0;
+            }
+            for (i = 0; i + 1 < n; ++i) {
                 eos_status_t r = eosi_text_step(session->text, ids[i], throwaway);
                 if (r != EOS_OK) {
                     eosi_free(throwaway); eosi_free(ids); return r;
@@ -218,9 +236,8 @@ eos_status_t eos_session_feed(eos_session_t      *session,
             }
             eosi_free(throwaway);
         }
-        /* Seed the scheduler with the last logits' implied token, i.e.
-         * the last input token (for greedy this isn't strictly used —
-         * the scheduler's next step computes from where pos points). */
+        session->pending_token = ids[n - 1];
+        session->has_pending   = 1;
         if (session->sched_state != NULL) {
             eosi_greedy_seed(session->sched_state, ids[n - 1]);
         }
@@ -230,10 +247,18 @@ eos_status_t eos_session_feed(eos_session_t      *session,
 }
 
 eos_status_t eos_session_step(eos_session_t *session, uint32_t *out_token) {
+    eos_status_t s;
     eosi_set_error(NULL);
     if (session == NULL || out_token == NULL) return EOS_E_INVALID_ARG;
     if (session->sched_vt == NULL) return EOS_E_UNSUPPORTED;
-    return session->sched_vt->step(session->sched_state, out_token);
+    s = session->sched_vt->step(session->sched_state, out_token);
+    if (s == EOS_OK) {
+        /* step() consumed the pending token; the one it returns is fed
+         * on the next step, or by the next eos_session_feed. */
+        session->pending_token = *out_token;
+        session->has_pending   = 1;
+    }
+    return s;
 }
 
 eos_status_t eos_session_set_deadline(eos_session_t *session,
