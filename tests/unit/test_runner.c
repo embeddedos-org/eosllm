@@ -179,6 +179,25 @@ static void test_f16_roundtrip(void) {
     }
 }
 
+static void test_f16_subnormal(void) {
+    /* binary16 subnormals are mant * 2^-24 (largest: 1023 * 2^-24).
+     * Real F16 weights and q8_0 / q4_k block scales land here. */
+    static const struct { eosi_f16_t h; float v; } cases[] = {
+        { 0x0001u,  5.9604644775390625e-08f },   /* 2^-24, smallest   */
+        { 0x0200u,  3.0517578125e-05f },          /* 2^-15             */
+        { 0x03FFu,  6.0975551605224609e-05f },    /* 1023 * 2^-24      */
+        { 0x8001u, -5.9604644775390625e-08f },    /* -2^-24            */
+        { 0x0400u,  6.103515625e-05f },           /* 2^-14, min normal */
+    };
+    unsigned i;
+    for (i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
+        const float r = eosi_f16_to_f32(cases[i].h);
+        CHECK(r == cases[i].v, "f16 subnormal decodes to mant * 2^-24");
+        CHECK(eosi_f32_to_f16(cases[i].v) == cases[i].h,
+              "f16 subnormal encodes back to the same bits");
+    }
+}
+
 static void test_matmul_q8_oracle_gguf(void) {
     /* GGUF q8_0 layout: f16 scale + 32 int8, 34 bytes. */
     enum { K = 32 };
@@ -1613,6 +1632,7 @@ int main(void) {
     test_session_lifecycle();
     test_matmul_f32();
     test_f16_roundtrip();
+    test_f16_subnormal();
     test_matmul_q8_oracle_gguf();
     test_matmul_q4_k_oracle();
     test_q8_0_dequant_quant_roundtrip();

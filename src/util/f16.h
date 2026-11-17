@@ -27,11 +27,12 @@ static inline float eosi_f16_to_f32(eosi_f16_t h) {
         if (mant == 0) {
             bits = sign;                         /* ±0 */
         } else {
-            /* subnormal — normalize */
-            uint32_t e = 1u, m = mant;
-            while ((m & 0x400u) == 0) { m <<= 1; e++; }
+            /* subnormal: mant * 2^-24 = 0.mant * 2^-14. Shift the
+             * leading 1 up to bit 10; each shift lowers the exponent. */
+            uint32_t shifts = 0u, m = mant;
+            while ((m & 0x400u) == 0) { m <<= 1; shifts++; }
             m &= 0x3FFu;
-            bits = sign | ((127u - 15u - e + 1u) << 23) | (m << 13);
+            bits = sign | ((127u - 14u - shifts) << 23) | (m << 13);
         }
     } else if (exp == 0x1Fu) {
         bits = sign | 0x7F800000u | (mant << 13); /* inf / NaN */
