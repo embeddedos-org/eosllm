@@ -401,12 +401,14 @@ int main(int argc, char **argv) {
              * and we skip it. Output is JSON. */
             static const char *str_keys[] = {
                 "general.architecture", "general.name", "general.author",
-                "general.license", "general.url", "general.file_type",
+                "general.license", "general.url",
                 "tokenizer.ggml.model", "tokenizer.ggml.pre",
                 NULL,
             };
+            /* general.file_type is a uint32 in GGUF, not a string. */
             static const char *u64_keys[] = {
                 "general.alignment", "general.quantization_version",
+                "general.file_type",
                 "tokenizer.ggml.bos_token_id", "tokenizer.ggml.eos_token_id",
                 "tokenizer.ggml.unknown_token_id", "tokenizer.ggml.padding_token_id",
                 NULL,

@@ -72,6 +72,10 @@ jobs:
         if: matrix.os != 'windows-2022'
         run: make cli && bash tests/cli/test_prompt_context.sh
 
+      - name: CLI --metadata prints general.file_type
+        if: matrix.os != 'windows-2022'
+        run: make cli && bash tests/cli/test_metadata_file_type.sh
+
       - name: Install Python test dependencies
         # The Python tests are stdlib-only wrappers around the C core;
         # only the test runners themselves need installing.
