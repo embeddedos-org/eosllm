@@ -750,7 +750,10 @@ record:
 | `tok_per_s` | int | Throughput in tokens per second. Currently always `0`. |
 
 On `reason: "error"` the record may carry an additional `detail` string
-naming the failing engine call (`feed`, `step`, `model_open`).
+naming the failing engine call and its status, e.g.
+`"detail":"model_open: I/O error"`. A run that fails before its first
+token (`init`, `model_open`, `session_open`, `feed`) still ends with
+exactly one such record, with `n_tokens` 0.
 
 ### Stability
 

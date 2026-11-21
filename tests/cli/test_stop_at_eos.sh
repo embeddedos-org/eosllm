@@ -11,7 +11,11 @@
 #   1. prompt "a": the stream holds "b", then ends with reason "eos", 1 token;
 #   2. prompt "b": no token at all, reason "eos";
 #   3. plain-text mode prints "ab", without the "</s>" text;
-#   4. the same model without tokenizer.ggml.eos_token_id still runs to --n.
+#   4. the same model without tokenizer.ggml.eos_token_id still runs to --n;
+#   5-7. a run that fails before the first token (model file missing, unknown
+#      scheduler, prompt longer than --ctx) still prints exactly one
+#      terminator with every documented key, reason "error" and a "detail",
+#      and exits 1.
 # Exits non-zero on any mismatch.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -134,4 +138,24 @@ last=$(printf '%s\n' "$out" | tail -n 1)
 [ "$last" = '{"done":true,"reason":"max","n_tokens":5,"ms":0,"tok_per_s":0}' ] \
   || fail "expected reason \"max\" after 5 tokens" "$out"
 
-echo "stop-at-eos: OK (4 checks)"
+# expect_error_done <check> <want-detail> <cli args...>
+expect_error_done() {
+  local name=$1 detail=$2 rc=0 out
+  shift 2
+  echo "--- $name ---"
+  out=$("$CLI" "$@" --stream-jsonl 2>/dev/null) || rc=$?
+  echo "$out"
+  echo "exit status: $rc"
+  [ "$out" = '{"done":true,"reason":"error","n_tokens":0,"ms":0,"tok_per_s":0,"detail":"'"$detail"'"}' ] \
+    || fail "$name: expected one error terminator with detail \"$detail\"" "$out"
+  [ "$rc" -eq 1 ] || fail "$name: expected exit 1, got $rc" "$out"
+}
+
+expect_error_done "5. model file missing" "model_open: I/O error" \
+  --model "$TMPDIR_/missing.gguf" --prompt "a" --n 5
+expect_error_done "6. unknown scheduler" "session_open: not found" \
+  --model "$MODEL" --prompt "a" --n 5 --scheduler no-such-scheduler
+expect_error_done "7. prompt longer than --ctx" "feed: out of memory" \
+  --model "$MODEL" --prompt "aba" --n 5 --ctx 1
+
+echo "stop-at-eos: OK (7 checks)"

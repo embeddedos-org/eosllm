@@ -241,6 +241,16 @@ cleanup_model:
     return rc;
 }
 
+/* --stream-jsonl terminator for a run that fails before its first token.
+ * docs/cli.md: every stream ends with exactly one terminator carrying
+ * n_tokens/ms/tok_per_s; an error one also names the failing call. */
+static void jsonl_error_done(const char *call, eos_status_t s) {
+    fprintf(stdout, "{\"done\":true,\"reason\":\"error\",\"n_tokens\":0,"
+                    "\"ms\":0,\"tok_per_s\":0,\"detail\":\"%s: %s\"}\n",
+            call, eos_status_str(s));
+    fflush(stdout);
+}
+
 int main(int argc, char **argv) {
     const char *model_path = NULL;
     const char *prompt     = NULL;
@@ -488,10 +498,18 @@ int main(int argc, char **argv) {
     if (model_path == NULL || prompt == NULL) { usage(); return 2; }
 
     s = eos_init_defaults();
-    if (s != EOS_OK) { fprintf(stderr, "init: %s\n", eos_status_str(s)); return 1; }
+    if (s != EOS_OK) {
+        if (stream_jsonl) jsonl_error_done("init", s);
+        fprintf(stderr, "init: %s\n", eos_status_str(s));
+        return 1;
+    }
 
     s = eos_model_open(model_path, &m);
-    if (s != EOS_OK) { fprintf(stderr, "open model: %s\n", eos_status_str(s)); return 1; }
+    if (s != EOS_OK) {
+        if (stream_jsonl) jsonl_error_done("model_open", s);
+        fprintf(stderr, "open model: %s\n", eos_status_str(s));
+        return 1;
+    }
 
     memset(&params, 0, sizeof(params));
     params.max_context = (uint32_t)max_ctx;
@@ -499,6 +517,7 @@ int main(int argc, char **argv) {
 
     s = eos_session_open(m, &params, &ss);
     if (s != EOS_OK) {
+        if (stream_jsonl) jsonl_error_done("session_open", s);
         fprintf(stderr, "open session: %s\n", eos_status_str(s));
         eos_model_close(m); return 1;
     }
@@ -506,8 +525,7 @@ int main(int argc, char **argv) {
     s = eos_session_feed(ss, EOS_MODALITY_TEXT, prompt, strlen(prompt));
     if (s != EOS_OK) {
         if (stream_jsonl) {
-            fprintf(stdout, "{\"done\":true,\"reason\":\"error\","
-                            "\"detail\":\"feed: %s\"}\n", eos_status_str(s));
+            jsonl_error_done("feed", s);
         } else {
             fprintf(stderr, "feed: %s\n", eos_status_str(s));
         }
