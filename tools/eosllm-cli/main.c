@@ -254,6 +254,7 @@ int main(int argc, char **argv) {
     int         show_caps   = 0;
     int         show_version = 0;
     int         stream_jsonl = 0;
+    int         exit_code    = 0;
     const char *meta_path   = NULL;
     int         i;
     eos_status_t s;
@@ -534,6 +535,8 @@ int main(int argc, char **argv) {
             s = eos_session_step(ss, &tok);
             if (s != EOS_OK) {
                 reason = (s == EOS_E_DEADLINE) ? "user" : "error";
+                /* docs/cli.md: a failed generation is an engine failure. */
+                if (s != EOS_E_DEADLINE) exit_code = 1;
                 if (!stream_jsonl) fprintf(stderr, "\nstep: %s\n", eos_status_str(s));
                 break;
             }
@@ -580,5 +583,5 @@ int main(int argc, char **argv) {
 
     eos_session_close(ss);
     eos_model_close(m);
-    return 0;
+    return exit_code;
 }
