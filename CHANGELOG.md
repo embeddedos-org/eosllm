@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- `eosllm-cli --stream-jsonl` ends a run that fails before its first token with one terminator record carrying every documented key (`n_tokens`, `ms`, `tok_per_s`) and a `detail` naming the failing call. A failed library init, model open or session open used to print nothing on stdout, and a failed prompt feed printed a terminator without `n_tokens`, `ms` and `tok_per_s`.
 - `eosllm-cli` stops generating when the model emits `tokenizer.ggml.eos_token_id` and reports `"reason":"eos"` in `--stream-jsonl`. It used to print the end-of-sequence token and keep going until `--n`.
 - `eos_session_feed()` puts each prompt token into the KV cache once. The last token of the prompt used to go in twice (once in the prefill and again on the first `eos_session_step()`), so the first new token was predicted from the wrong context, and a prompt that exactly filled `--ctx` produced no token at all.
 - `eosi_f16_to_f32()` decodes binary16 subnormals (`0x0001`–`0x03FF`, magnitudes below 2^-14) to their real value. It used to return half of it, so F16 weights in that range and q8_0, q4_k and q1_58 block scales in that range came out at half their value.
