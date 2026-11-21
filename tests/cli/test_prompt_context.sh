@@ -12,7 +12,9 @@
 # Checks:
 #   1. prompt "ab": the first token is "c";
 #   2. prompt "a" (one token): the first token is "c";
-#   3. prompt "ab" with --ctx 2: the prompt fits, so one token is produced.
+#   3. prompt "ab" with --ctx 2: the prompt fits, so one token is produced;
+#   4. the same with --n 2: the second step finds the context full, so the
+#      run must end with reason "error" and exit 1 (docs/cli.md).
 # Exits non-zero on any mismatch.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -124,4 +126,14 @@ expect='{"t":"c","i":4}
 {"done":true,"reason":"max","n_tokens":1,"ms":0,"tok_per_s":0}'
 [ "$out" = "$expect" ] || fail "a 2-token prompt in a 2-token context must still produce a token" "$out"
 
-echo "prompt-context: OK (3 checks)"
+echo "--- 4. prompt \"ab\" with --ctx 2 --n 2: context fills up ---"
+rc=0
+out=$("$CLI" --model "$MODEL" --prompt "ab" --n 2 --ctx 2 --stream-jsonl) || rc=$?
+echo "$out"
+echo "exit status: $rc"
+expect='{"t":"c","i":4}
+{"done":true,"reason":"error","n_tokens":1,"ms":0,"tok_per_s":0}'
+[ "$out" = "$expect" ] || fail "expected one token, then reason \"error\"" "$out"
+[ "$rc" -eq 1 ] || fail "a failed generation must exit 1, got $rc" "$out"
+
+echo "prompt-context: OK (4 checks)"
